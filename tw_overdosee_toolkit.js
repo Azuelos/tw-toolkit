@@ -3386,16 +3386,106 @@
                 targetY: '',
                 delayMs: 200,
                 waves: [
-                    { label: 'Limpeza (sem Nobre)', troops: { spear: 0, sword: 0, axe: 200, spy: 5, light: 0, heavy: 0, ram: 5, catapult: 0, knight: 0, snob: 0 }},
-                    { label: 'Nobre 1', troops: { spear: 50, sword: 0, axe: 50, spy: 0, light: 0, heavy: 0, ram: 0, catapult: 0, knight: 0, snob: 1 }},
-                    { label: 'Nobre 2', troops: { spear: 50, sword: 0, axe: 50, spy: 0, light: 0, heavy: 0, ram: 0, catapult: 0, knight: 0, snob: 1 }},
-                    { label: 'Nobre 3', troops: { spear: 50, sword: 0, axe: 50, spy: 0, light: 0, heavy: 0, ram: 0, catapult: 0, knight: 0, snob: 1 }},
-                    { label: 'Nobre 4', troops: { spear: 50, sword: 0, axe: 50, spy: 0, light: 0, heavy: 0, ram: 0, catapult: 0, knight: 0, snob: 1 }}
+                    { label: 'Onda 1 (Limpeza + Nobre)', troops: { spear: 0, sword: 0, axe: 300, spy: 5, light: 50, heavy: 0, ram: 10, catapult: 0, knight: 0, snob: 1 }},
+                    { label: 'Onda 2 (Nobre)', troops: { spear: 50, sword: 50, axe: 0, spy: 0, light: 0, heavy: 0, ram: 0, catapult: 0, knight: 0, snob: 1 }},
+                    { label: 'Onda 3 (Nobre)', troops: { spear: 50, sword: 50, axe: 0, spy: 0, light: 0, heavy: 0, ram: 0, catapult: 0, knight: 0, snob: 1 }},
+                    { label: 'Onda 4 (Nobre)', troops: { spear: 50, sword: 50, axe: 0, spy: 0, light: 0, heavy: 0, ram: 0, catapult: 0, knight: 0, snob: 1 }}
                 ],
                 log: []
             };
         },
         
+        init() {
+            this.injectOnConfirmPage();
+            this.bindEvents();
+        },
+
+        injectOnConfirmPage() {
+            const form = document.getElementById('command-data-form');
+            if (!form) return;
+            if (document.getElementById('tw-nt-confirm-widget')) return;
+
+            const submitBtn = document.getElementById('troop_confirm_submit');
+            if (!submitBtn) return;
+
+            const widget = document.createElement('div');
+            widget.id = 'tw-nt-confirm-widget';
+            widget.style.cssText = `
+                margin: 10px 0;
+                padding: 10px 14px;
+                background: linear-gradient(135deg, #1f0a00 0%, #0d0400 100%);
+                border: 2px solid #ffd700;
+                border-radius: 6px;
+                color: #f0e0c0;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+                font-family: Verdana, Arial, sans-serif;
+            `;
+
+            const defaultDelay = this.config.delayMs || 200;
+
+            widget.innerHTML = `
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;border-bottom:1px solid #5a3a1a;padding-bottom:6px">
+                    <strong style="color:#ffd700;font-size:13px;display:flex;align-items:center;gap:6px">
+                        🏰 Trem de Nobres Instantâneo (Ondas Automáticas)
+                    </strong>
+                    <span style="font-size:11px;color:#a08060">Delay: <b style="color:#ffd700">${defaultDelay}ms</b></span>
+                </div>
+                <div style="display:flex;gap:10px;align-items:center">
+                    <button id="tw-nt-instant-fire-btn" type="button" style="flex:1;padding:8px 12px;background:linear-gradient(to bottom, #d9822b, #b86014);border:1px solid #8c4405;color:#fff;font-weight:bold;font-size:12px;border-radius:4px;cursor:pointer">
+                        🚀 Disparar Trem (4 Ondas de Nobre)
+                    </button>
+                </div>
+                <div id="tw-nt-instant-info" style="font-size:10px;color:#a08060;margin-top:6px">
+                    ℹ️ Dispara as 4 ondas do Trem de Nobres sequencialmente com ${defaultDelay}ms de intervalo.
+                </div>
+            `;
+
+            form.insertBefore(widget, form.firstChild);
+
+            document.getElementById('tw-nt-instant-fire-btn').onclick = (e) => {
+                e.preventDefault();
+                this.fireInstantTrainFromConfirmPage();
+            };
+        },
+
+        async fireInstantTrainFromConfirmPage() {
+            const targetLink = document.querySelector('#command-data-form a[href*="screen=info_village"]');
+            let targetX = '', targetY = '';
+            if (targetLink) {
+                const match = targetLink.innerText.match(/(\d+)\|(\d+)/);
+                if (match) {
+                    targetX = match[1];
+                    targetY = match[2];
+                }
+            }
+
+            if (!targetX || !targetY) {
+                const cfg = this.config;
+                targetX = cfg.targetX;
+                targetY = cfg.targetY;
+            }
+
+            if (!targetX || !targetY) {
+                UI.showNotification('❌ Não foi possível identificar as coordenadas do alvo!', 'error');
+                return;
+            }
+
+            const cfg = this.config;
+            cfg.targetX = targetX;
+            cfg.targetY = targetY;
+            this.save(cfg);
+
+            const btn = document.getElementById('tw-nt-instant-fire-btn');
+            const info = document.getElementById('tw-nt-instant-info');
+            if (btn) { btn.disabled = true; btn.innerText = '⏳ Disparando Ondas...'; }
+
+            UI.showNotification(`🚀 Disparando Trem de Nobres para ${targetX}|${targetY}...`, 'info');
+            await this.fireTrain();
+
+            if (btn) { btn.disabled = false; btn.innerText = '🚀 Disparar Trem (4 Ondas de Nobre)'; }
+            if (info) info.innerHTML = '✅ Trem de Nobres finalizado!';
+        },
+
         save(cfg) {
             try { localStorage.setItem(this.KEY, JSON.stringify(cfg)); } catch(e) {}
         },
@@ -3411,8 +3501,8 @@
         buildHTML() {
             const cfg = this.config;
             const unitNames = {
-                spear: 'Lanc', sword: 'Esp', axe: 'Barb', spy: 'Expl',
-                light: 'CL', heavy: 'CP', ram: 'Aríe', catapult: 'Cata',
+                spear: 'Lanc', sword: 'Esp', axe: 'Barb', archer: 'Arq', spy: 'Expl',
+                light: 'CL', marcher: 'C.Arq', heavy: 'CP', ram: 'Aríe', catapult: 'Cata',
                 knight: 'Pala', snob: 'Nobre'
             };
             
@@ -3486,8 +3576,8 @@
                 </div>
                 
                 <p style="font-size:9px;color:#555;margin-top:6px">
-                    ⚠️ Funciona na Praça de Reunião. Usa os endpoints reais do jogo.
-                    O delay padrão de 200ms garante que as ondas cheguem com frações de segundo de diferença.
+                    ⚠️ Funciona em qualquer página. Usa os endpoints oficiais da Praça de Armas.
+                    O delay padrão de 200ms garante que as ondas cheguem em sequência perfeita.
                 </p>
             `;
         },
@@ -3496,7 +3586,7 @@
             // Salvar configuração
             document.getElementById('tw-nt-save')?.addEventListener('click', () => {
                 this.saveCurrentConfig();
-                UI.showFeedback('Configuração do trem salva!');
+                UI.showNotification('💾 Configuração do trem salva!', 'success');
             });
             
             // Atualizar delay
@@ -3530,7 +3620,7 @@
                 const waveNum = cfg.waves.length + 1;
                 cfg.waves.push({
                     label: `Nobre ${waveNum - 1}`,
-                    troops: { spear: 50, sword: 0, axe: 50, spy: 0, light: 0, heavy: 0, ram: 0, catapult: 0, knight: 0, snob: 1 }
+                    troops: { spear: 50, sword: 50, axe: 0, archer: 0, spy: 0, light: 0, marcher: 0, heavy: 0, ram: 0, catapult: 0, knight: 0, snob: 1 }
                 });
                 this.save(cfg);
                 this.refreshPanel();
@@ -3588,19 +3678,19 @@
             const cfg = this.config;
             
             if (!cfg.targetX || !cfg.targetY) {
-                UI.showFeedback('❌ Defina a coordenada do alvo!');
+                UI.showNotification('❌ Defina a coordenada do alvo!', 'error');
                 return;
             }
             
             if (!cfg.waves.length) {
-                UI.showFeedback('❌ Adicione pelo menos uma onda!');
+                UI.showNotification('❌ Adicione pelo menos uma onda!', 'error');
                 return;
             }
             
             // Verifica se tem tropas em alguma wave
             const hasTroops = cfg.waves.some(w => Object.values(w.troops).some(v => v > 0));
             if (!hasTroops) {
-                UI.showFeedback('❌ Defina tropas em pelo menos uma onda!');
+                UI.showNotification('❌ Defina tropas em pelo menos uma onda!', 'error');
                 return;
             }
             
@@ -3608,7 +3698,7 @@
             const h = typeof game_data !== 'undefined' ? game_data.csrf : TW.csrf;
             
             if (!vid || !h) {
-                UI.showFeedback('❌ Dados do jogo não disponíveis!');
+                UI.showNotification('❌ Dados do jogo não disponíveis!', 'error');
                 return;
             }
             
@@ -3623,7 +3713,6 @@
             for (let i = 0; i < cfg.waves.length; i++) {
                 const wave = cfg.waves[i];
                 
-                // Delay entre waves (primeira não espera)
                 if (i > 0) {
                     this.updateWaveStatus(i, `⏳ Esperando ${cfg.delayMs}ms...`);
                     await new Promise(r => setTimeout(r, cfg.delayMs));
@@ -3649,27 +3738,25 @@
             }
             
             this.addLog(`✅ Trem finalizado: ${successCount}/${cfg.waves.length} ondas enviadas`);
-            UI.showFeedback(`Trem de Nobres: ${successCount}/${cfg.waves.length} ondas enviadas!`);
+            UI.showNotification(`🏰 Trem de Nobres: ${successCount}/${cfg.waves.length} ondas enviadas!`, successCount > 0 ? 'success' : 'error');
             
             if (fireBtn) { fireBtn.disabled = false; fireBtn.innerHTML = '🚀 DISPARAR TREM'; }
         },
         
         async sendWave(wave, targetX, targetY, vid, h) {
-            // Monta os dados do formulário de ataque
+            // PASSO 1: Envia formulário inicial da Praça de Armas (x e y como parâmetros)
             const formData = new URLSearchParams();
-            formData.append('target_x', targetX);
-            formData.append('target_y', targetY);
-            formData.append('attack', 'true');
-            formData.append('input', '');
-            formData.append(h ? 'h' : 'ch', h);
+            formData.append('x', targetX);
+            formData.append('y', targetY);
+            formData.append('attack', 'Atacar');
+            if (h) formData.append('h', h);
             
             // Adiciona tropas
-            const unitOrder = ['spear', 'sword', 'axe', 'spy', 'light', 'heavy', 'ram', 'catapult', 'knight', 'snob'];
+            const unitOrder = ['spear', 'sword', 'axe', 'archer', 'spy', 'light', 'marcher', 'heavy', 'ram', 'catapult', 'knight', 'snob'];
             for (const unit of unitOrder) {
                 formData.append(unit, wave.troops[unit] || 0);
             }
             
-            // PASSO 1: Envia para confirmação
             const confirmResp = await fetch(`/game.php?village=${vid}&screen=place&try=confirm`, {
                 method: 'POST',
                 body: formData,
@@ -3682,40 +3769,39 @@
             }
             
             const confirmHtml = await confirmResp.text();
-            
-            // Verifica se tem erro (ex: sem tropas suficientes)
-            if (confirmHtml.includes('error') && confirmHtml.includes('Erro')) {
-                // Tenta extrair mensagem de erro
-                const errorMatch = confirmHtml.match(/class="error[^"]*"[^>]*>([^<]+)/);
-                return { ok: false, error: errorMatch ? errorMatch[1].trim() : 'Erro na confirmação' };
-            }
-            
-            // PASSO 2: Extrai token de confirmação (ch) e action_id
             const parser = new DOMParser();
             const doc = parser.parseFromString(confirmHtml, 'text/html');
             
-            // Busca o formulário de confirmação
-            const confirmForm = doc.querySelector('#command-data-form, form[action*="place"]');
+            // Se o jogo retornou caixa de erro (ex: sem tropas suficientes)
+            const errorBox = doc.querySelector('.error_box, .error, .info_box');
+            if (errorBox && confirmHtml.includes('error')) {
+                return { ok: false, error: errorBox.innerText.trim() };
+            }
+            
+            // PASSO 2: Extrai o formulário de confirmação #command-data-form
+            const confirmForm = doc.querySelector('#command-data-form, form[action*="screen=place"]');
             if (!confirmForm) {
-                // Pode ser que já tenha sido enviado direto ou que a página retornou erro
                 if (confirmHtml.includes('Comando enviado') || confirmHtml.includes('sucesso')) {
                     return { ok: true };
                 }
                 return { ok: false, error: 'Formulário de confirmação não encontrado' };
             }
             
-            // Coleta todos os inputs hidden do formulário de confirmação
+            // Coleta todos os inputs do formulário de confirmação
             const confirmData = new URLSearchParams();
-            confirmForm.querySelectorAll('input[type="hidden"], input[name]').forEach(input => {
-                if (input.name) confirmData.append(input.name, input.value || '');
+            confirmForm.querySelectorAll('input').forEach(input => {
+                if (input.name && input.type !== 'button') {
+                    confirmData.append(input.name, input.value || '');
+                }
             });
             
-            // Garante que o attack está setado
-            confirmData.set('attack', 'true');
+            if (!confirmData.has('submit')) confirmData.append('submit', 'Atacar');
             
-            // PASSO 3: Confirma o envio
-            const action = confirmForm.getAttribute('action') || `/game.php?village=${vid}&screen=place&action=command`;
-            const sendResp = await fetch(action.replace(/&amp;/g, '&'), {
+            let action = confirmForm.getAttribute('action') || `/game.php?village=${vid}&screen=place&action=command`;
+            action = action.replace(/&amp;/g, '&');
+            
+            // PASSO 3: Confirma a ordem de ataque
+            const sendResp = await fetch(action, {
                 method: 'POST',
                 body: confirmData,
                 credentials: 'same-origin',
@@ -3723,6 +3809,12 @@
             });
             
             if (sendResp.ok) {
+                const sendHtml = await sendResp.text();
+                if (sendHtml.includes('error') && sendHtml.includes('error_box')) {
+                    const sendDoc = parser.parseFromString(sendHtml, 'text/html');
+                    const err = sendDoc.querySelector('.error_box, .error');
+                    return { ok: false, error: err ? err.innerText.trim() : 'Erro ao confirmar ataque' };
+                }
                 return { ok: true };
             }
             
@@ -4074,7 +4166,7 @@
             FarmScheduler.resume();
             BuildQueue.bindEvents();
             BuildQueue.resume();
-            NobleTrain.bindEvents();
+            NobleTrain.init();
             CommandSniper.init();
             
             // Aplica tamanho salvo do mapa principal e marcações
