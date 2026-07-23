@@ -3386,10 +3386,10 @@
                 targetY: '',
                 delayMs: 200,
                 waves: [
-                    { label: 'Onda 1 (Limpeza + Nobre)', troops: { spear: 0, sword: 0, axe: 300, spy: 5, light: 50, heavy: 0, ram: 10, catapult: 0, knight: 0, snob: 1 }},
-                    { label: 'Onda 2 (Nobre)', troops: { spear: 50, sword: 50, axe: 0, spy: 0, light: 0, heavy: 0, ram: 0, catapult: 0, knight: 0, snob: 1 }},
-                    { label: 'Onda 3 (Nobre)', troops: { spear: 50, sword: 50, axe: 0, spy: 0, light: 0, heavy: 0, ram: 0, catapult: 0, knight: 0, snob: 1 }},
-                    { label: 'Onda 4 (Nobre)', troops: { spear: 50, sword: 50, axe: 0, spy: 0, light: 0, heavy: 0, ram: 0, catapult: 0, knight: 0, snob: 1 }}
+                    { label: 'Onda 1 (Limpeza + Nobre)', troops: { spear: 0, sword: 0, axe: 0, archer: 0, spy: 0, light: 0, marcher: 0, heavy: 0, ram: 0, catapult: 0, knight: 0, snob: 1 }},
+                    { label: 'Onda 2 (Nobre)', troops: { spear: 0, sword: 0, axe: 0, archer: 0, spy: 0, light: 0, marcher: 0, heavy: 0, ram: 0, catapult: 0, knight: 0, snob: 1 }},
+                    { label: 'Onda 3 (Nobre)', troops: { spear: 0, sword: 0, axe: 0, archer: 0, spy: 0, light: 0, marcher: 0, heavy: 0, ram: 0, catapult: 0, knight: 0, snob: 1 }},
+                    { label: 'Onda 4 (Nobre)', troops: { spear: 0, sword: 0, axe: 0, archer: 0, spy: 0, light: 0, marcher: 0, heavy: 0, ram: 0, catapult: 0, knight: 0, snob: 1 }}
                 ],
                 log: []
             };
@@ -3449,6 +3449,16 @@
         },
 
         async fireInstantTrainFromConfirmPage() {
+            const form = document.getElementById('command-data-form');
+            const pageTroops = {};
+            if (form) {
+                const unitOrder = ['spear', 'sword', 'axe', 'archer', 'spy', 'light', 'marcher', 'heavy', 'ram', 'catapult', 'knight', 'snob'];
+                unitOrder.forEach(unit => {
+                    const input = form.querySelector(`input[name="${unit}"]`);
+                    if (input) pageTroops[unit] = parseInt(input.value) || 0;
+                });
+            }
+
             const targetLink = document.querySelector('#command-data-form a[href*="screen=info_village"]');
             let targetX = '', targetY = '';
             if (targetLink) {
@@ -3473,6 +3483,13 @@
             const cfg = this.config;
             cfg.targetX = targetX;
             cfg.targetY = targetY;
+
+            if (Object.keys(pageTroops).length > 0 && Object.values(pageTroops).some(v => v > 0)) {
+                if (cfg.waves[0]) {
+                    cfg.waves[0].troops = pageTroops;
+                }
+            }
+
             this.save(cfg);
 
             const btn = document.getElementById('tw-nt-instant-fire-btn');
@@ -3568,6 +3585,7 @@
                         🚀 DISPARAR TREM
                     </button>
                     <button class="tw-btn" id="tw-nt-save" style="flex:1;font-size:11px">💾 Salvar</button>
+                    <button class="tw-btn" id="tw-nt-reset" style="flex:1;font-size:11px;background:#444" title="Restaurar padrão limpo">🧹 Zerar</button>
                 </div>
                 
                 <div class="tw-section" style="margin-top:8px">
@@ -3589,6 +3607,13 @@
                 UI.showNotification('💾 Configuração do trem salva!', 'success');
             });
             
+            // Zerar configuração
+            document.getElementById('tw-nt-reset')?.addEventListener('click', () => {
+                this.save(this.defaultConfig());
+                this.refreshPanel();
+                UI.showNotification('🧹 Configurações e tropas resetadas!', 'info');
+            });
+
             // Atualizar delay
             document.getElementById('tw-nt-delay')?.addEventListener('change', (e) => {
                 const cfg = this.config;
@@ -3620,7 +3645,7 @@
                 const waveNum = cfg.waves.length + 1;
                 cfg.waves.push({
                     label: `Nobre ${waveNum - 1}`,
-                    troops: { spear: 50, sword: 50, axe: 0, archer: 0, spy: 0, light: 0, marcher: 0, heavy: 0, ram: 0, catapult: 0, knight: 0, snob: 1 }
+                    troops: { spear: 0, sword: 0, axe: 0, archer: 0, spy: 0, light: 0, marcher: 0, heavy: 0, ram: 0, catapult: 0, knight: 0, snob: 1 }
                 });
                 this.save(cfg);
                 this.refreshPanel();
