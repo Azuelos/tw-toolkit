@@ -3749,9 +3749,10 @@
             formData.append('x', targetX);
             formData.append('y', targetY);
             formData.append('attack', 'Atacar');
+            formData.append('target_type', 'coord');
             if (h) formData.append('h', h);
             
-            // Adiciona tropas
+            // Adiciona todas as unidades
             const unitOrder = ['spear', 'sword', 'axe', 'archer', 'spy', 'light', 'marcher', 'heavy', 'ram', 'catapult', 'knight', 'snob'];
             for (const unit of unitOrder) {
                 formData.append(unit, wave.troops[unit] || 0);
@@ -3761,7 +3762,10 @@
                 method: 'POST',
                 body: formData,
                 credentials: 'same-origin',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                headers: { 
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
             });
             
             if (!confirmResp.ok) {
@@ -3773,7 +3777,7 @@
             const doc = parser.parseFromString(confirmHtml, 'text/html');
             
             // Se o jogo retornou caixa de erro (ex: sem tropas suficientes)
-            const errorBox = doc.querySelector('.error_box, .error, .info_box');
+            const errorBox = doc.querySelector('.error_box, .error, .info_box.error');
             if (errorBox && confirmHtml.includes('error')) {
                 return { ok: false, error: errorBox.innerText.trim() };
             }
@@ -3781,21 +3785,26 @@
             // PASSO 2: Extrai o formulário de confirmação #command-data-form
             const confirmForm = doc.querySelector('#command-data-form, form[action*="screen=place"]');
             if (!confirmForm) {
-                if (confirmHtml.includes('Comando enviado') || confirmHtml.includes('sucesso')) {
-                    return { ok: true };
-                }
-                return { ok: false, error: 'Formulário de confirmação não encontrado' };
+                return { ok: false, error: 'Formulário de confirmação não retornado pelo jogo' };
             }
             
-            // Coleta todos os inputs do formulário de confirmação
+            // Coleta TODOS os campos do formulário de confirmação (inputs + buttons + select + textarea)
             const confirmData = new URLSearchParams();
-            confirmForm.querySelectorAll('input').forEach(input => {
-                if (input.name && input.type !== 'button') {
-                    confirmData.append(input.name, input.value || '');
+            
+            confirmForm.querySelectorAll('input, select, textarea').forEach(el => {
+                if (el.name && el.type !== 'button') {
+                    confirmData.append(el.name, el.value || '');
+                }
+            });
+            
+            confirmForm.querySelectorAll('button').forEach(btn => {
+                if (btn.name) {
+                    confirmData.append(btn.name, btn.value || 'Atacar');
                 }
             });
             
             if (!confirmData.has('submit')) confirmData.append('submit', 'Atacar');
+            if (!confirmData.has('troop_confirm_submit')) confirmData.append('troop_confirm_submit', 'true');
             
             let action = confirmForm.getAttribute('action') || `/game.php?village=${vid}&screen=place&action=command`;
             action = action.replace(/&amp;/g, '&');
@@ -3805,20 +3814,35 @@
                 method: 'POST',
                 body: confirmData,
                 credentials: 'same-origin',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                headers: { 
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
             });
             
-            if (sendResp.ok) {
-                const sendHtml = await sendResp.text();
-                if (sendHtml.includes('error') && sendHtml.includes('error_box')) {
-                    const sendDoc = parser.parseFromString(sendHtml, 'text/html');
-                    const err = sendDoc.querySelector('.error_box, .error');
-                    return { ok: false, error: err ? err.innerText.trim() : 'Erro ao confirmar ataque' };
-                }
-                return { ok: true };
+            if (!sendResp.ok) {
+                return { ok: false, error: `HTTP ${sendResp.status}` };
             }
             
-            return { ok: false, error: `HTTP ${sendResp.status}` };
+            const sendHtml = await sendResp.text();
+            const sendDoc = parser.parseFromString(sendHtml, 'text/html');
+            
+            // Verifica se o jogo retornou erro
+            const sendErr = sendDoc.querySelector('.error_box, .error, .info_box.error');
+            if (sendErr) {
+                return { ok: false, error: sendErr.innerText.trim() };
+            }
+            
+            // VERIFICAÇÃO RIGOROSA:
+            // Se o comando foi enviado com sucesso, a info_box aparece OU o formulário #command-data-form desapareceu
+            const hasInfoBox = sendDoc.querySelector('.info_box') !== null;
+            const stillHasForm = sendDoc.querySelector('#command-data-form') !== null;
+            
+            if (hasInfoBox || !stillHasForm) {
+                return { ok: true };
+            } else {
+                return { ok: false, error: 'Servidor rejeitou a confirmação do ataque' };
+            }
         },
         
         refreshPanel() {
