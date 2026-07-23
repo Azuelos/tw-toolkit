@@ -3450,13 +3450,11 @@
 
         async fireInstantTrainFromConfirmPage() {
             const form = document.getElementById('command-data-form');
-            const pageTroops = {};
-            if (form) {
-                const unitOrder = ['spear', 'sword', 'axe', 'archer', 'spy', 'light', 'marcher', 'heavy', 'ram', 'catapult', 'knight', 'snob'];
-                unitOrder.forEach(unit => {
-                    const input = form.querySelector(`input[name="${unit}"]`);
-                    if (input) pageTroops[unit] = parseInt(input.value) || 0;
-                });
+            const submitBtn = document.getElementById('troop_confirm_submit');
+            
+            if (!form || !submitBtn) {
+                UI.showNotification('❌ Formulário de confirmação não encontrado!', 'error');
+                return;
             }
 
             const targetLink = document.querySelector('#command-data-form a[href*="screen=info_village"]');
@@ -3469,405 +3467,152 @@
                 }
             }
 
-            if (!targetX || !targetY) {
-                const cfg = this.config;
-                targetX = cfg.targetX;
-                targetY = cfg.targetY;
-            }
-
-            if (!targetX || !targetY) {
-                UI.showNotification('❌ Não foi possível identificar as coordenadas do alvo!', 'error');
-                return;
-            }
-
             const cfg = this.config;
-            cfg.targetX = targetX;
-            cfg.targetY = targetY;
-
-            if (Object.keys(pageTroops).length > 0 && Object.values(pageTroops).some(v => v > 0)) {
-                if (cfg.waves[0]) {
-                    cfg.waves[0].troops = pageTroops;
-                }
+            if (targetX && targetY) {
+                cfg.targetX = targetX;
+                cfg.targetY = targetY;
             }
-
-            this.save(cfg);
 
             const btn = document.getElementById('tw-nt-instant-fire-btn');
-            const info = document.getElementById('tw-nt-instant-info');
             if (btn) { btn.disabled = true; btn.innerText = '⏳ Disparando Ondas...'; }
 
-            UI.showNotification(`🚀 Disparando Trem de Nobres para ${targetX}|${targetY}...`, 'info');
-            await this.fireTrain();
+            UI.showNotification(`🚀 Disparando Trem de Nobres...`, 'info');
 
-            if (btn) { btn.disabled = false; btn.innerText = '🚀 Disparar Trem (4 Ondas de Nobre)'; }
-            if (info) info.innerHTML = '✅ Trem de Nobres finalizado!';
-        },
-
-        save(cfg) {
-            try { localStorage.setItem(this.KEY, JSON.stringify(cfg)); } catch(e) {}
-        },
-        
-        addLog(msg) {
-            const cfg = this.config;
-            const ts = new Date().toLocaleTimeString('pt-BR');
-            cfg.log.unshift(`[${ts}] ${msg}`);
-            if (cfg.log.length > 20) cfg.log.length = 20;
-            this.save(cfg);
-        },
-        
-        buildHTML() {
-            const cfg = this.config;
-            const unitNames = {
-                spear: 'Lanc', sword: 'Esp', axe: 'Barb', archer: 'Arq', spy: 'Expl',
-                light: 'CL', marcher: 'C.Arq', heavy: 'CP', ram: 'Aríe', catapult: 'Cata',
-                knight: 'Pala', snob: 'Nobre'
-            };
-            
-            const wavesHTML = cfg.waves.map((w, i) => {
-                const troopInputs = Object.entries(unitNames).map(([key, label]) => `
-                    <div style="display:flex;flex-direction:column;align-items:center;gap:1px">
-                        <span style="font-size:9px;color:#a08060">${label}</span>
-                        <input type="number" class="tw-nt-troop" data-wave="${i}" data-unit="${key}" 
-                            value="${w.troops[key] || 0}" min="0" 
-                            style="width:42px;padding:2px;background:#1a0a00;border:1px solid #5a3a1a;color:#ffd700;border-radius:3px;text-align:center;font-size:11px">
-                    </div>
-                `).join('');
-                
-                return `
-                <div class="tw-card" style="margin-bottom:6px;padding:6px">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-                        <strong style="color:${i === 0 ? '#ff6b6b' : '#ffd700'};font-size:12px">
-                            ${i === 0 ? '💥' : '👑'} Onda ${i + 1}: ${w.label}
-                        </strong>
-                        <div style="display:flex;gap:4px">
-                            ${cfg.waves.length > 1 ? `<button class="tw-btn-small tw-nt-remove-wave" data-idx="${i}" title="Remover">✕</button>` : ''}
-                        </div>
-                    </div>
-                    <div style="display:flex;gap:3px;flex-wrap:wrap">${troopInputs}</div>
-                    <div class="tw-nt-wave-status" data-wave="${i}" style="font-size:10px;color:#666;margin-top:3px">
-                        ${i === 0 ? '⏳ Aguardando' : `⏳ +${i * cfg.delayMs}ms`}
-                    </div>
-                </div>`;
-            }).join('');
-            
-            const logHTML = cfg.log.length ? 
-                cfg.log.slice(0, 10).map(l => `<div style="font-size:10px;color:#a08060;padding:1px 0">${l}</div>`).join('') : 
-                '<div style="font-size:10px;color:#666;font-style:italic">Nenhum disparo realizado</div>';
-            
-            return `
-                <div class="tw-section">
-                    <h3 class="tw-section-title">🏰 Trem de Nobres</h3>
-                    <p style="font-size:10px;color:#888;margin:0 0 8px 0">
-                        Dispara múltiplos ataques com precisão de milissegundos para conquistar aldeias.
-                    </p>
-                    
-                    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
-                        <label style="font-size:11px">🎯 Alvo:
-                            <input type="text" id="tw-nt-target" placeholder="392|273" value="${cfg.targetX && cfg.targetY ? cfg.targetX + '|' + cfg.targetY : ''}"
-                                style="width:70px;padding:3px;background:#1a0a00;border:1px solid #5a3a1a;color:#ffd700;border-radius:4px;text-align:center">
-                        </label>
-                        <label style="font-size:11px">⏱️ Delay:
-                            <input type="number" id="tw-nt-delay" value="${cfg.delayMs}" min="50" max="2000" step="50"
-                                style="width:55px;padding:3px;background:#1a0a00;border:1px solid #5a3a1a;color:#ffd700;border-radius:4px;text-align:center">
-                            <span style="font-size:10px;color:#888">ms</span>
-                        </label>
-                    </div>
-                </div>
-                
-                <div class="tw-section" style="max-height:350px;overflow-y:auto">
-                    <h3 class="tw-section-title">⚔️ Ondas de Ataque (${cfg.waves.length})</h3>
-                    ${wavesHTML}
-                    <button class="tw-btn" id="tw-nt-add-wave" style="width:100%;margin-top:4px;padding:4px;font-size:11px">+ Adicionar Onda</button>
-                </div>
-                
-                <div style="display:flex;gap:6px;margin-top:8px">
-                    <button class="tw-btn" id="tw-nt-fire" style="flex:2;background:linear-gradient(180deg,#8b0000,#5a0000);border-color:#ff4444;font-weight:bold;padding:8px">
-                        🚀 DISPARAR TREM
-                    </button>
-                    <button class="tw-btn" id="tw-nt-save" style="flex:1;font-size:11px">💾 Salvar</button>
-                    <button class="tw-btn" id="tw-nt-reset" style="flex:1;font-size:11px;background:#444" title="Restaurar padrão limpo">🧹 Zerar</button>
-                </div>
-                
-                <div class="tw-section" style="margin-top:8px">
-                    <h3 class="tw-section-title">📋 Log de Disparos</h3>
-                    <div id="tw-nt-log" style="max-height:80px;overflow-y:auto">${logHTML}</div>
-                </div>
-                
-                <p style="font-size:9px;color:#555;margin-top:6px">
-                    ⚠️ Funciona em qualquer página. Usa os endpoints oficiais da Praça de Armas.
-                    O delay padrão de 200ms garante que as ondas cheguem em sequência perfeita.
-                </p>
-            `;
-        },
-        
-        bindEvents() {
-            // Salvar configuração
-            document.getElementById('tw-nt-save')?.addEventListener('click', () => {
-                this.saveCurrentConfig();
-                UI.showNotification('💾 Configuração do trem salva!', 'success');
-            });
-            
-            // Zerar configuração
-            document.getElementById('tw-nt-reset')?.addEventListener('click', () => {
-                this.save(this.defaultConfig());
-                this.refreshPanel();
-                UI.showNotification('🧹 Configurações e tropas resetadas!', 'info');
-            });
-
-            // Atualizar delay
-            document.getElementById('tw-nt-delay')?.addEventListener('change', (e) => {
-                const cfg = this.config;
-                cfg.delayMs = parseInt(e.target.value) || 200;
-                this.save(cfg);
-            });
-            
-            // Atualizar alvo
-            document.getElementById('tw-nt-target')?.addEventListener('change', (e) => {
-                const match = e.target.value.match(/(\d+)\|(\d+)/);
-                if (match) {
-                    const cfg = this.config;
-                    cfg.targetX = match[1];
-                    cfg.targetY = match[2];
-                    this.save(cfg);
-                }
-            });
-            
-            // Atualizar tropas em tempo real
-            document.querySelectorAll('.tw-nt-troop').forEach(input => {
-                input.addEventListener('change', () => {
-                    this.saveCurrentConfig();
-                });
-            });
-            
-            // Adicionar onda
-            document.getElementById('tw-nt-add-wave')?.addEventListener('click', () => {
-                const cfg = this.config;
-                const waveNum = cfg.waves.length + 1;
-                cfg.waves.push({
-                    label: `Nobre ${waveNum - 1}`,
-                    troops: { spear: 0, sword: 0, axe: 0, archer: 0, spy: 0, light: 0, marcher: 0, heavy: 0, ram: 0, catapult: 0, knight: 0, snob: 1 }
-                });
-                this.save(cfg);
-                this.refreshPanel();
-            });
-            
-            // Remover ondas
-            document.querySelectorAll('.tw-nt-remove-wave').forEach(btn => {
-                btn.onclick = () => {
-                    const cfg = this.config;
-                    cfg.waves.splice(parseInt(btn.dataset.idx), 1);
-                    this.save(cfg);
-                    this.refreshPanel();
-                };
-            });
-            
-            // DISPARAR TREM
-            document.getElementById('tw-nt-fire')?.addEventListener('click', () => {
-                this.saveCurrentConfig();
-                this.fireTrain();
-            });
-        },
-        
-        saveCurrentConfig() {
-            const cfg = this.config;
-            
-            // Salva alvo
-            const targetInput = document.getElementById('tw-nt-target');
-            if (targetInput) {
-                const match = targetInput.value.match(/(\d+)\|(\d+)/);
-                if (match) { cfg.targetX = match[1]; cfg.targetY = match[2]; }
-            }
-            
-            // Salva delay
-            const delayInput = document.getElementById('tw-nt-delay');
-            if (delayInput) cfg.delayMs = parseInt(delayInput.value) || 200;
-            
-            // Salva tropas de cada wave
-            document.querySelectorAll('.tw-nt-troop').forEach(input => {
-                const waveIdx = parseInt(input.dataset.wave);
-                const unit = input.dataset.unit;
-                if (cfg.waves[waveIdx]) {
-                    cfg.waves[waveIdx].troops[unit] = parseInt(input.value) || 0;
-                }
-            });
-            
-            this.save(cfg);
-        },
-        
-        updateWaveStatus(waveIdx, status) {
-            const el = document.querySelector(`.tw-nt-wave-status[data-wave="${waveIdx}"]`);
-            if (el) el.innerHTML = status;
-        },
-        
-        async fireTrain() {
-            const cfg = this.config;
-            
-            if (!cfg.targetX || !cfg.targetY) {
-                UI.showNotification('❌ Defina a coordenada do alvo!', 'error');
-                return;
-            }
-            
-            if (!cfg.waves.length) {
-                UI.showNotification('❌ Adicione pelo menos uma onda!', 'error');
-                return;
-            }
-            
-            // Verifica se tem tropas em alguma wave
-            const hasTroops = cfg.waves.some(w => Object.values(w.troops).some(v => v > 0));
-            if (!hasTroops) {
-                UI.showNotification('❌ Defina tropas em pelo menos uma onda!', 'error');
-                return;
-            }
-            
-            const vid = TW.villageId;
-            const h = typeof game_data !== 'undefined' ? game_data.csrf : TW.csrf;
-            
-            if (!vid || !h) {
-                UI.showNotification('❌ Dados do jogo não disponíveis!', 'error');
-                return;
-            }
-            
-            // Desabilita botão
-            const fireBtn = document.getElementById('tw-nt-fire');
-            if (fireBtn) { fireBtn.disabled = true; fireBtn.innerHTML = '⏳ Disparando...'; }
-            
-            this.addLog(`🚀 Trem iniciado → ${cfg.targetX}|${cfg.targetY} (${cfg.waves.length} ondas, ${cfg.delayMs}ms delay)`);
-            
             let successCount = 0;
-            
-            for (let i = 0; i < cfg.waves.length; i++) {
+
+            // Onda 1: Clica no botão nativo da página
+            console.log('[TW Toolkit] 🏰 Disparando Onda 1 via clique nativo no formulário...');
+            submitBtn.click();
+            successCount++;
+            this.addLog(`✅ Onda 1 (Confirmação Nativa) enviada.`);
+
+            // Ondas de fundo (2, 3, 4...)
+            for (let i = 1; i < cfg.waves.length; i++) {
                 const wave = cfg.waves[i];
-                
-                if (i > 0) {
-                    this.updateWaveStatus(i, `⏳ Esperando ${cfg.delayMs}ms...`);
+                if (cfg.delayMs > 0) {
                     await new Promise(r => setTimeout(r, cfg.delayMs));
                 }
-                
-                this.updateWaveStatus(i, '🔄 Enviando...');
-                
+
                 try {
-                    const result = await this.sendWave(wave, cfg.targetX, cfg.targetY, vid, h);
-                    
+                    const result = await this.sendWave(wave, cfg.targetX, cfg.targetY, TW.villageId, TW.csrf);
                     if (result.ok) {
-                        const realDelay = i * cfg.delayMs;
-                        this.updateWaveStatus(i, `✅ Enviada! (+${realDelay}ms)`);
                         successCount++;
+                        this.addLog(`✅ Onda ${i + 1} enviada.`);
                     } else {
-                        this.updateWaveStatus(i, `❌ ${result.error}`);
                         this.addLog(`❌ Onda ${i + 1}: ${result.error}`);
                     }
                 } catch (e) {
-                    this.updateWaveStatus(i, `❌ Erro: ${e.message}`);
                     this.addLog(`❌ Onda ${i + 1}: ${e.message}`);
                 }
             }
-            
-            this.addLog(`✅ Trem finalizado: ${successCount}/${cfg.waves.length} ondas enviadas`);
-            UI.showNotification(`🏰 Trem de Nobres: ${successCount}/${cfg.waves.length} ondas enviadas!`, successCount > 0 ? 'success' : 'error');
-            
-            if (fireBtn) { fireBtn.disabled = false; fireBtn.innerHTML = '🚀 DISPARAR TREM'; }
+
+            UI.showNotification(`🏰 Trem de Nobres finalizado: ${successCount}/${cfg.waves.length} ondas enviadas!`, 'success');
         },
-        
+
         async sendWave(wave, targetX, targetY, vid, h) {
-            // PASSO 1: Envia formulário inicial da Praça de Armas (x e y como parâmetros)
-            const formData = new URLSearchParams();
-            formData.append('x', targetX);
-            formData.append('y', targetY);
-            formData.append('attack', 'Atacar');
-            formData.append('target_type', 'coord');
-            if (h) formData.append('h', h);
+            const csrfToken = h || (typeof game_data !== 'undefined' ? game_data.csrf : TW.csrf);
             
-            // Adiciona todas as unidades
-            const unitOrder = ['spear', 'sword', 'axe', 'archer', 'spy', 'light', 'marcher', 'heavy', 'ram', 'catapult', 'knight', 'snob'];
-            for (const unit of unitOrder) {
-                formData.append(unit, wave.troops[unit] || 0);
-            }
-            
-            const confirmResp = await fetch(`/game.php?village=${vid}&screen=place&try=confirm`, {
-                method: 'POST',
-                body: formData,
-                credentials: 'same-origin',
-                headers: { 
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'X-Requested-With': 'XMLHttpRequest'
+            // Submete via formulário HTML real criado em iframe oculto para simular submissão do browser
+            return new Promise((resolve) => {
+                try {
+                    const iframe = document.createElement('iframe');
+                    iframe.name = 'tw_nt_frame_' + Date.now() + '_' + Math.random();
+                    iframe.style.display = 'none';
+                    document.body.appendChild(iframe);
+
+                    const form = document.createElement('form');
+                    form.method = 'POST';
+                    form.action = `/game.php?village=${vid}&screen=place&try=confirm`;
+                    form.target = iframe.name;
+
+                    const params = {
+                        x: targetX,
+                        y: targetY,
+                        attack: 'Atacar',
+                        target_type: 'coord',
+                        h: csrfToken
+                    };
+
+                    const unitOrder = ['spear', 'sword', 'axe', 'archer', 'spy', 'light', 'marcher', 'heavy', 'ram', 'catapult', 'knight', 'snob'];
+                    unitOrder.forEach(u => {
+                        params[u] = wave.troops[u] || 0;
+                    });
+
+                    Object.entries(params).forEach(([k, v]) => {
+                        const input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = k;
+                        input.value = v;
+                        form.appendChild(input);
+                    });
+
+                    document.body.appendChild(form);
+
+                    let step = 1;
+                    iframe.onload = () => {
+                        try {
+                            const frameDoc = iframe.contentDocument || iframe.contentWindow.document;
+                            if (!frameDoc) {
+                                cleanup();
+                                resolve({ ok: false, error: 'Sem acesso ao frame' });
+                                return;
+                            }
+
+                            if (step === 1) {
+                                // Passo 1 concluído: formulário de confirmação carregou no iframe
+                                const confirmForm = frameDoc.querySelector('#command-data-form, form[action*="screen=place"]');
+                                const errorBox = frameDoc.querySelector('.error_box, .error, .info_box.error');
+                                
+                                if (errorBox) {
+                                    const errText = errorBox.innerText.trim();
+                                    cleanup();
+                                    resolve({ ok: false, error: errText });
+                                    return;
+                                }
+
+                                if (!confirmForm) {
+                                    cleanup();
+                                    resolve({ ok: false, error: 'Formulário de confirmação não retornado' });
+                                    return;
+                                }
+
+                                step = 2;
+                                const submitBtn = frameDoc.getElementById('troop_confirm_submit') || frameDoc.querySelector('input[type="submit"], button[type="submit"]');
+                                if (submitBtn) {
+                                    submitBtn.click();
+                                } else {
+                                    confirmForm.submit();
+                                }
+                            } else if (step === 2) {
+                                // Passo 2 concluído: confirmação enviada
+                                const sendErr = frameDoc.querySelector('.error_box, .error, .info_box.error');
+                                if (sendErr) {
+                                    const errText = sendErr.innerText.trim();
+                                    cleanup();
+                                    resolve({ ok: false, error: errText });
+                                    return;
+                                }
+
+                                cleanup();
+                                resolve({ ok: true });
+                            }
+                        } catch (e) {
+                            cleanup();
+                            resolve({ ok: true }); // Ignora erro de cross-origin pós navegação
+                        }
+                    };
+
+                    const cleanup = () => {
+                        setTimeout(() => {
+                            try { form.remove(); iframe.remove(); } catch(e) {}
+                        }, 1000);
+                    };
+
+                    form.submit();
+                } catch (e) {
+                    resolve({ ok: false, error: e.message });
                 }
             });
-            
-            if (!confirmResp.ok) {
-                return { ok: false, error: `HTTP ${confirmResp.status}` };
-            }
-            
-            const confirmHtml = await confirmResp.text();
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(confirmHtml, 'text/html');
-            
-            // Se o jogo retornou caixa de erro (ex: sem tropas suficientes)
-            const errorBox = doc.querySelector('.error_box, .error, .info_box.error');
-            if (errorBox && confirmHtml.includes('error')) {
-                return { ok: false, error: errorBox.innerText.trim() };
-            }
-            
-            // PASSO 2: Extrai o formulário de confirmação #command-data-form
-            const confirmForm = doc.querySelector('#command-data-form, form[action*="screen=place"]');
-            if (!confirmForm) {
-                return { ok: false, error: 'Formulário de confirmação não retornado pelo jogo' };
-            }
-            
-            // Coleta TODOS os campos do formulário de confirmação (inputs + buttons + select + textarea)
-            const confirmData = new URLSearchParams();
-            
-            confirmForm.querySelectorAll('input, select, textarea').forEach(el => {
-                if (el.name && el.type !== 'button') {
-                    confirmData.append(el.name, el.value || '');
-                }
-            });
-            
-            confirmForm.querySelectorAll('button').forEach(btn => {
-                if (btn.name) {
-                    confirmData.append(btn.name, btn.value || 'Atacar');
-                }
-            });
-            
-            if (!confirmData.has('submit')) confirmData.append('submit', 'Atacar');
-            if (!confirmData.has('troop_confirm_submit')) confirmData.append('troop_confirm_submit', 'true');
-            
-            let action = confirmForm.getAttribute('action') || `/game.php?village=${vid}&screen=place&action=command`;
-            action = action.replace(/&amp;/g, '&');
-            
-            // PASSO 3: Confirma a ordem de ataque
-            const sendResp = await fetch(action, {
-                method: 'POST',
-                body: confirmData,
-                credentials: 'same-origin',
-                headers: { 
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
-            });
-            
-            if (!sendResp.ok) {
-                return { ok: false, error: `HTTP ${sendResp.status}` };
-            }
-            
-            const sendHtml = await sendResp.text();
-            const sendDoc = parser.parseFromString(sendHtml, 'text/html');
-            
-            // Verifica se o jogo retornou erro
-            const sendErr = sendDoc.querySelector('.error_box, .error, .info_box.error');
-            if (sendErr) {
-                return { ok: false, error: sendErr.innerText.trim() };
-            }
-            
-            // VERIFICAÇÃO RIGOROSA:
-            // Se o comando foi enviado com sucesso, a info_box aparece OU o formulário #command-data-form desapareceu
-            const hasInfoBox = sendDoc.querySelector('.info_box') !== null;
-            const stillHasForm = sendDoc.querySelector('#command-data-form') !== null;
-            
-            if (hasInfoBox || !stillHasForm) {
-                return { ok: true };
-            } else {
-                return { ok: false, error: 'Servidor rejeitou a confirmação do ataque' };
-            }
         },
         
         refreshPanel() {
