@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         TW Toolkit v4.0 — Tribal Wars
+// @name         TW Toolkit v4.1 — Tribal Wars
 // @namespace    tw-toolkit
-// @version      4.0.1
-// @description  Toolkit COMPLETO para Tribal Wars: Buscador de Farms, Planejador de Ataques, Analisador de Incoming, HUD de Recursos, Auto Farm, Fila de Construção e mais.
+// @version      4.1.0
+// @description  Toolkit COMPLETO para Tribal Wars: Command Sniper (ms), Buscador de Farms, Planejador de Ataques, Analisador de Incoming, HUD de Recursos, Auto Farm, Trem de Nobres e mais.
 // @author       TW Toolkit
 // @match        *://*.tribalwars.com.br/game.php*
 // @match        *://*.tribalwars.net/game.php*
@@ -16,7 +16,7 @@
 
 /**
  * ============================================================================
- *  ⚔️  TW TOOLKIT v4.0 — Tribal Wars (Qualquer Mundo)
+ *  ⚔️  TW TOOLKIT v4.1 — Tribal Wars (Qualquer Mundo)
  * ============================================================================
  *  Conjunto de ferramentas para Tribal Wars
  *  Compatível com: BR, EN, PT e outros mercados
@@ -94,7 +94,7 @@
     };
 
     const TW = {
-        version: '4.0.1',
+        version: '4.1.0',
         name: 'TW Toolkit',
         
         // Helper para acessar o contexto real da página (necessário para Tampermonkey)
@@ -535,7 +535,8 @@
                 { id: 'mapEnhancer', icon: '🗺️', label: 'Mapa' },
                 { id: 'farmScheduler', icon: '🌾', label: 'Auto Farm' },
                 { id: 'buildQueue', icon: '🏗️', label: 'Auto Build' },
-                { id: 'nobleTrain', icon: '🏰', label: 'Trem Nobre' }
+                { id: 'nobleTrain', icon: '🏰', label: 'Trem Nobre' },
+                { id: 'commandSniper', icon: '🎯', label: 'Sniper MS' }
             ];
             
             const tabsHTML = tabs.map((t, i) => 
@@ -567,6 +568,7 @@
                     <div class="tw-panel" id="tw-panel-farmScheduler">${FarmScheduler.buildHTML()}</div>
                     <div class="tw-panel" id="tw-panel-buildQueue">${BuildQueue.buildHTML()}</div>
                     <div class="tw-panel" id="tw-panel-nobleTrain">${NobleTrain.buildHTML()}</div>
+                    <div class="tw-panel" id="tw-panel-commandSniper">${CommandSniper.buildHTML()}</div>
                 </div>
             `;
         },
@@ -2337,6 +2339,11 @@
                             UI.toggle(true);
                             document.querySelector('.tw-tab[data-panel="incomings"]')?.click();
                             break;
+                        case 's': // Alt+S = Sniper MS
+                            e.preventDefault();
+                            UI.toggle(true);
+                            document.querySelector('.tw-tab[data-panel="commandSniper"]')?.click();
+                            break;
                         case 'h': // Alt+H = Toggle HUD
                             e.preventDefault();
                             const hud = document.getElementById('tw-resource-hud');
@@ -3732,6 +3739,300 @@
     };
 
     // ═══════════════════════════════════════════════════
+    // 🎯 COMMAND SNIPER (Timer de Milissegundo)
+    // ═══════════════════════════════════════════════════
+    
+    const CommandSniper = {
+        KEY: 'tw_toolkit_sniper',
+        timerId: null,
+
+        get config() {
+            try { return JSON.parse(localStorage.getItem(this.KEY)) || { offset: -250, log: [] }; }
+            catch { return { offset: -250, log: [] }; }
+        },
+
+        save(cfg) {
+            try { localStorage.setItem(this.KEY, JSON.stringify(cfg)); } catch(e) {}
+        },
+
+        init() {
+            this.injectOnConfirmPage();
+            this.bindEvents();
+        },
+
+        injectOnConfirmPage() {
+            const form = document.getElementById('command-data-form');
+            if (!form) return;
+            if (document.getElementById('tw-sniper-widget')) return;
+
+            const submitBtn = document.getElementById('troop_confirm_submit');
+            if (!submitBtn) return;
+
+            let durationText = '';
+            const durationTd = typeof jQuery !== 'undefined' 
+                ? jQuery(form).find('td:contains("Duração:"), td:contains("Durações:"), td:contains("Duration:")').next()
+                : null;
+            if (durationTd && durationTd.length) {
+                durationText = durationTd.text().trim();
+            }
+
+            const defaultOffset = this.config.offset !== undefined ? this.config.offset : -250;
+
+            const widget = document.createElement('div');
+            widget.id = 'tw-sniper-widget';
+            widget.style.cssText = `
+                margin: 10px 0 16px 0;
+                padding: 12px 16px;
+                background: linear-gradient(135deg, #2a1200 0%, #150800 100%);
+                border: 2px solid #ff6b6b;
+                border-radius: 6px;
+                color: #f0e0c0;
+                box-shadow: 0 4px 14px rgba(0,0,0,0.6);
+                font-family: Verdana, Arial, sans-serif;
+            `;
+
+            widget.innerHTML = `
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;border-bottom:1px solid #5a3a1a;padding-bottom:6px">
+                    <strong style="color:#ff6b6b;font-size:14px;display:flex;align-items:center;gap:6px">
+                        🎯 Sniper de Comando (Milissegundos)
+                    </strong>
+                    <span style="font-size:11px;color:#a08060">Duração: <b style="color:#ffd700">${durationText || 'N/A'}</b></span>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px">
+                    <div>
+                        <label style="font-size:11px;color:#a08060;display:block;margin-bottom:3px">Hora Alvo de Chegada (AAAA-MM-DD HH:MM:SS.mmm):</label>
+                        <input type="datetime-local" id="tw-sniper-time" step="0.001" 
+                            style="width:100%;padding:6px;background:#0d0500;border:1px solid #8a5a2a;color:#ffd700;border-radius:4px;font-size:12px">
+                    </div>
+                    <div>
+                        <label style="font-size:11px;color:#a08060;display:block;margin-bottom:3px">Offset de Latência (ms):</label>
+                        <div style="display:flex;gap:6px">
+                            <input type="number" id="tw-sniper-offset" value="${defaultOffset}" step="10" 
+                                style="width:100%;padding:6px;background:#0d0500;border:1px solid #8a5a2a;color:#ffd700;border-radius:4px;font-size:12px">
+                            <button id="tw-sniper-preset-offset" class="tw-btn-small" type="button" style="white-space:nowrap" title="Salvar Offset como Padrão">💾 Padrão</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="tw-sniper-info" style="font-size:11px;color:#c0a080;margin-bottom:10px;background:rgba(0,0,0,0.3);padding:8px;border-radius:4px;border:1px dashed #5a3a1a">
+                    ℹ️ Defina o horário exato de chegada e clique em <b>Agendar Disparo</b>. O script enviará no milissegundo exato!
+                </div>
+                <div style="display:flex;gap:10px;align-items:center">
+                    <button id="tw-sniper-start-btn" type="button" style="flex:1;padding:9px 14px;background:linear-gradient(to bottom, #d9534f, #c9302c);border:1px solid #ac2925;color:#fff;font-weight:bold;font-size:13px;border-radius:4px;cursor:pointer">
+                        🎯 Agendar Disparo Sniper
+                    </button>
+                    <button id="tw-sniper-cancel-btn" type="button" style="display:none;padding:9px 14px;background:#555;border:1px solid #333;color:#fff;font-size:12px;border-radius:4px;cursor:pointer">
+                        🚫 Cancelar Agendamento
+                    </button>
+                </div>
+            `;
+
+            form.insertBefore(widget, form.firstChild);
+            this.setupWidgetEvents(durationText);
+        },
+
+        setupWidgetEvents(durationText) {
+            const timeInput = document.getElementById('tw-sniper-time');
+            const offsetInput = document.getElementById('tw-sniper-offset');
+            const startBtn = document.getElementById('tw-sniper-start-btn');
+            const cancelBtn = document.getElementById('tw-sniper-cancel-btn');
+            const presetBtn = document.getElementById('tw-sniper-preset-offset');
+
+            if (!timeInput || !startBtn) return;
+
+            if (durationText && !timeInput.value) {
+                const parts = durationText.split(':').map(Number);
+                if (parts.length === 3) {
+                    const durMs = ((parts[0] * 3600) + (parts[1] * 60) + parts[2]) * 1000;
+                    const getServerTime = () => (typeof Timing !== 'undefined' && Timing.getCurrentServerTime) ? Timing.getCurrentServerTime() : Date.now();
+                    const estimatedArrival = new Date(getServerTime() + durMs + 60000);
+                    timeInput.value = this.dateToInputString(estimatedArrival);
+                }
+            }
+
+            if (presetBtn) {
+                presetBtn.onclick = (e) => {
+                    e.preventDefault();
+                    const val = parseInt(offsetInput.value) || -250;
+                    const cfg = this.config;
+                    cfg.offset = val;
+                    this.save(cfg);
+                    UI.showNotification(`💾 Offset padrão salvo como ${val}ms!`, 'success');
+                };
+            }
+
+            startBtn.onclick = (e) => {
+                e.preventDefault();
+                this.startSniper(timeInput.value, parseInt(offsetInput.value) || -250, durationText);
+            };
+
+            cancelBtn.onclick = (e) => {
+                e.preventDefault();
+                this.stopSniper();
+            };
+        },
+
+        dateToInputString(date) {
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            const hh = String(date.getHours()).padStart(2, '0');
+            const mm = String(date.getMinutes()).padStart(2, '0');
+            const ss = String(date.getSeconds()).padStart(2, '0');
+            const ms = String(date.getMilliseconds()).padStart(3, '0');
+            return `${y}-${m}-${d}T${hh}:${mm}:${ss}.${ms}`;
+        },
+
+        startSniper(targetTimeString, offsetMs, durationText) {
+            if (!targetTimeString) {
+                UI.showNotification('⚠️ Especifique a hora alvo de chegada!', 'warning');
+                return;
+            }
+
+            const arrivalDate = new Date(targetTimeString);
+            if (isNaN(arrivalDate.getTime())) {
+                UI.showNotification('⚠️ Data/Hora inválida!', 'error');
+                return;
+            }
+
+            const arrivalMs = arrivalDate.getTime();
+            
+            let durationMs = 0;
+            if (durationText) {
+                const parts = durationText.split(':').map(Number);
+                if (parts.length === 3) {
+                    durationMs = ((parts[0] * 3600) + (parts[1] * 60) + parts[2]) * 1000;
+                }
+            }
+
+            const targetLaunchMs = arrivalMs - durationMs;
+            const triggerMs = targetLaunchMs + offsetMs;
+
+            const submitBtn = document.getElementById('troop_confirm_submit');
+            if (!submitBtn) {
+                UI.showNotification('❌ Botão de confirmação de ataque não encontrado!', 'error');
+                return;
+            }
+
+            const startBtn = document.getElementById('tw-sniper-start-btn');
+            const cancelBtn = document.getElementById('tw-sniper-cancel-btn');
+            const infoDiv = document.getElementById('tw-sniper-info');
+
+            startBtn.disabled = true;
+            startBtn.style.opacity = '0.5';
+            cancelBtn.style.display = 'inline-block';
+            submitBtn.classList.add('btn-disabled');
+
+            UI.showNotification('🎯 Agendamento ativado! Mantenha a aba aberta.', 'info');
+
+            if (this.timerId) clearInterval(this.timerId);
+
+            const getServerTime = () => (typeof Timing !== 'undefined' && Timing.getCurrentServerTime) ? Timing.getCurrentServerTime() : Date.now();
+
+            this.timerId = setInterval(() => {
+                const nowMs = getServerTime();
+                const remaining = triggerMs - nowMs;
+
+                if (infoDiv) {
+                    const launchDate = new Date(targetLaunchMs);
+                    const launchStr = launchDate.toLocaleTimeString('pt-BR') + '.' + String(launchDate.getMilliseconds()).padStart(3, '0');
+                    
+                    if (remaining > 0) {
+                        const secLeft = (remaining / 1000).toFixed(2);
+                        infoDiv.innerHTML = `
+                            <div style="color:#ffd700;font-weight:bold;font-size:13px">
+                                ⏳ Disparo para: <span style="color:#64b5f6">${launchStr}</span> | Offset: <b>${offsetMs}ms</b>
+                            </div>
+                            <div style="color:#ff6b6b;font-size:14px;margin-top:4px">
+                                ⏱️ Contagem Regressiva: <b>${secLeft}s</b>
+                            </div>
+                        `;
+                    } else {
+                        infoDiv.innerHTML = `<span style="color:#81c784;font-size:14px;font-weight:bold">🚀 DISPARANDO COMANDO AGORA!</span>`;
+                    }
+                }
+
+                if (remaining <= 0) {
+                    clearInterval(this.timerId);
+                    this.timerId = null;
+                    submitBtn.classList.remove('btn-disabled');
+                    console.log('[TW Toolkit] 🎯 Disparando comando via Sniper!');
+                    submitBtn.click();
+                }
+            }, 10);
+        },
+
+        stopSniper() {
+            if (this.timerId) {
+                clearInterval(this.timerId);
+                this.timerId = null;
+            }
+
+            const startBtn = document.getElementById('tw-sniper-start-btn');
+            const cancelBtn = document.getElementById('tw-sniper-cancel-btn');
+            const infoDiv = document.getElementById('tw-sniper-info');
+            const submitBtn = document.getElementById('troop_confirm_submit');
+
+            if (startBtn) {
+                startBtn.disabled = false;
+                startBtn.style.opacity = '1';
+            }
+            if (cancelBtn) cancelBtn.style.display = 'none';
+            if (submitBtn) submitBtn.classList.remove('btn-disabled');
+            if (infoDiv) infoDiv.innerHTML = `ℹ️ Agendamento cancelado.`;
+
+            UI.showNotification('🛑 Agendamento do Sniper cancelado.', 'info');
+        },
+
+        bindEvents() {
+            const saveBtn = document.getElementById('tw-sniper-save-cfg');
+            if (saveBtn) {
+                saveBtn.onclick = () => {
+                    const offsetVal = parseInt(document.getElementById('tw-sniper-tab-offset')?.value) || -250;
+                    const cfg = this.config;
+                    cfg.offset = offsetVal;
+                    this.save(cfg);
+                    UI.showNotification(`💾 Configurações salvas! Offset padrão: ${offsetVal}ms`, 'success');
+                };
+            }
+        },
+
+        buildHTML() {
+            const cfg = this.config;
+            return `
+                <div class="tw-card">
+                    <h3>🎯 Command Sniper (Milissegundos)</h3>
+                    <p style="font-size:12px;color:#a08060;margin-bottom:12px">
+                        O Sniper permite enviar ataques ou apoios no milissegundo exato para encaixar comandos (Snipes, NTs, Apoios após nobre) com precisão cirúrgica.
+                    </p>
+
+                    <div style="background:#1a0a00;border:1px solid #5a3a1a;padding:10px;border-radius:6px;margin-bottom:12px">
+                        <h4 style="color:#ffd700;margin-bottom:6px">📋 Como Usar:</h4>
+                        <ol style="font-size:11px;color:#f0e0c0;padding-left:20px;line-height:1.6">
+                            <li>Vá até a <b>Praça de Armas</b> e envie um comando de ataque ou apoio.</li>
+                            <li>Na tela de <b>Confirmação de Ataque</b>, a caixa do 🎯 <b>Sniper</b> aparecerá automaticamente no topo do formulário.</li>
+                            <li>Informe a <b>Hora Alvo de Chegada</b> desejada (incluindo os milissegundos).</li>
+                            <li>Ajuste o <b>Offset de Latência</b> (padrão <code>-250ms</code> compensa a latência do servidor).</li>
+                            <li>Clique em <b>🎯 Agendar Disparo Sniper</b>. O toolkit disparará o comando no instante exato!</li>
+                        </ol>
+                    </div>
+
+                    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+                        <div style="flex:1">
+                            <label style="font-size:11px;color:#a08060">Offset de Latência Padrão (ms):</label>
+                            <input type="number" id="tw-sniper-tab-offset" value="${cfg.offset !== undefined ? cfg.offset : -250}" step="10" 
+                                style="width:100%;padding:5px;background:#0d0500;border:1px solid #8a5a2a;color:#ffd700;border-radius:3px;font-size:11px">
+                        </div>
+                        <button id="tw-sniper-save-cfg" class="tw-btn" style="margin-top:14px">💾 Salvar Configurações</button>
+                        <a href="${TW.linkBase || '/game.php?screen='}place" class="tw-btn" style="margin-top:14px;text-decoration:none;display:inline-block;text-align:center">
+                            🏰 Ir para Praça de Armas
+                        </a>
+                    </div>
+                </div>
+            `;
+        }
+    };
+
+    // ═══════════════════════════════════════════════════
     // 🚀 INICIALIZAÇÃO (com restauração de estado)
     // ═══════════════════════════════════════════════════
     
@@ -3774,6 +4075,7 @@
             BuildQueue.bindEvents();
             BuildQueue.resume();
             NobleTrain.bindEvents();
+            CommandSniper.init();
             
             // Aplica tamanho salvo do mapa principal e marcações
             if (TW.screen === 'map') {
@@ -3795,7 +4097,7 @@
                 'color: #ffd700; font-size: 16px; font-weight: bold; text-shadow: 0 0 5px rgba(255,215,0,0.5);');
             console.log(`%c👤 Jogador: ${TW.player.name} | 🏰 Aldeia: ${TW.village.name} (${TW.village.x}|${TW.village.y}) | Premium: ${TW.isPremium}`, 
                 'color: #f0e0c0; font-size: 12px;');
-            console.log('%c⌨️ Atalhos: Alt+T (toolkit) | Alt+F (farms) | Alt+P (planner) | Alt+I (incomings) | Alt+H (HUD)',
+            console.log('%c⌨️ Atalhos: Alt+T (toolkit) | Alt+F (farms) | Alt+P (planner) | Alt+S (sniper) | Alt+I (incomings) | Alt+H (HUD)',
                 'color: #a08060; font-size: 11px;');
         } catch (e) {
             console.error('❌ [TW Toolkit] ERRO FATAL no init():', e);
