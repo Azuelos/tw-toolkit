@@ -535,7 +535,6 @@
                 { id: 'mapEnhancer', icon: '🗺️', label: 'Mapa' },
                 { id: 'farmScheduler', icon: '🌾', label: 'Auto Farm' },
                 { id: 'buildQueue', icon: '🏗️', label: 'Auto Build' },
-                { id: 'nobleTrain', icon: '🏰', label: 'Trem Nobre' },
                 { id: 'commandSniper', icon: '🎯', label: 'Sniper MS' }
             ];
             
@@ -567,7 +566,6 @@
                     <div class="tw-panel" id="tw-panel-mapEnhancer">${MapEnhancer.buildHTML()}</div>
                     <div class="tw-panel" id="tw-panel-farmScheduler">${FarmScheduler.buildHTML()}</div>
                     <div class="tw-panel" id="tw-panel-buildQueue">${BuildQueue.buildHTML()}</div>
-                    <div class="tw-panel" id="tw-panel-nobleTrain">${NobleTrain.buildHTML()}</div>
                     <div class="tw-panel" id="tw-panel-commandSniper">${CommandSniper.buildHTML()}</div>
                 </div>
             `;
@@ -3368,261 +3366,7 @@
         }
     };
 
-    // ═══════════════════════════════════════════════════
-    // 🏰 TREM DE NOBRES (Noble Train)
-    // ═══════════════════════════════════════════════════
-    
-    const NobleTrain = {
-        KEY: 'tw_toolkit_noble_train',
-        
-        get config() {
-            try { return JSON.parse(localStorage.getItem(this.KEY)) || this.defaultConfig(); }
-            catch { return this.defaultConfig(); }
-        },
-        
-        defaultConfig() {
-            return {
-                targetX: '',
-                targetY: '',
-                delayMs: 200,
-                waves: [
-                    { label: 'Onda 1 (Limpeza + Nobre)', troops: { spear: 0, sword: 0, axe: 0, archer: 0, spy: 0, light: 0, marcher: 0, heavy: 0, ram: 0, catapult: 0, knight: 0, snob: 1 }},
-                    { label: 'Onda 2 (Nobre)', troops: { spear: 0, sword: 0, axe: 0, archer: 0, spy: 0, light: 0, marcher: 0, heavy: 0, ram: 0, catapult: 0, knight: 0, snob: 1 }},
-                    { label: 'Onda 3 (Nobre)', troops: { spear: 0, sword: 0, axe: 0, archer: 0, spy: 0, light: 0, marcher: 0, heavy: 0, ram: 0, catapult: 0, knight: 0, snob: 1 }},
-                    { label: 'Onda 4 (Nobre)', troops: { spear: 0, sword: 0, axe: 0, archer: 0, spy: 0, light: 0, marcher: 0, heavy: 0, ram: 0, catapult: 0, knight: 0, snob: 1 }}
-                ],
-                log: []
-            };
-        },
-        
-        init() {
-            this.injectOnConfirmPage();
-            this.bindEvents();
-        },
 
-        injectOnConfirmPage() {
-            const form = document.getElementById('command-data-form');
-            if (!form) return;
-            if (document.getElementById('tw-nt-confirm-widget')) return;
-
-            const submitBtn = document.getElementById('troop_confirm_submit');
-            if (!submitBtn) return;
-
-            const widget = document.createElement('div');
-            widget.id = 'tw-nt-confirm-widget';
-            widget.style.cssText = `
-                margin: 10px 0;
-                padding: 10px 14px;
-                background: linear-gradient(135deg, #1f0a00 0%, #0d0400 100%);
-                border: 2px solid #ffd700;
-                border-radius: 6px;
-                color: #f0e0c0;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-                font-family: Verdana, Arial, sans-serif;
-            `;
-
-            const defaultDelay = this.config.delayMs || 200;
-
-            widget.innerHTML = `
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;border-bottom:1px solid #5a3a1a;padding-bottom:6px">
-                    <strong style="color:#ffd700;font-size:13px;display:flex;align-items:center;gap:6px">
-                        🏰 Trem de Nobres Instantâneo (Ondas Automáticas)
-                    </strong>
-                    <span style="font-size:11px;color:#a08060">Delay: <b style="color:#ffd700">${defaultDelay}ms</b></span>
-                </div>
-                <div style="display:flex;gap:10px;align-items:center">
-                    <button id="tw-nt-instant-fire-btn" type="button" style="flex:1;padding:8px 12px;background:linear-gradient(to bottom, #d9822b, #b86014);border:1px solid #8c4405;color:#fff;font-weight:bold;font-size:12px;border-radius:4px;cursor:pointer">
-                        🚀 Disparar Trem (4 Ondas de Nobre)
-                    </button>
-                </div>
-                <div id="tw-nt-instant-info" style="font-size:10px;color:#a08060;margin-top:6px">
-                    ℹ️ Dispara as 4 ondas do Trem de Nobres sequencialmente com ${defaultDelay}ms de intervalo.
-                </div>
-            `;
-
-            form.insertBefore(widget, form.firstChild);
-
-            document.getElementById('tw-nt-instant-fire-btn').onclick = (e) => {
-                e.preventDefault();
-                this.fireInstantTrainFromConfirmPage();
-            };
-        },
-
-        async fireInstantTrainFromConfirmPage() {
-            const form = document.getElementById('command-data-form');
-            const submitBtn = document.getElementById('troop_confirm_submit');
-            
-            if (!form || !submitBtn) {
-                UI.showNotification('❌ Formulário de confirmação não encontrado!', 'error');
-                return;
-            }
-
-            const targetLink = document.querySelector('#command-data-form a[href*="screen=info_village"]');
-            let targetX = '', targetY = '';
-            if (targetLink) {
-                const match = targetLink.innerText.match(/(\d+)\|(\d+)/);
-                if (match) {
-                    targetX = match[1];
-                    targetY = match[2];
-                }
-            }
-
-            const cfg = this.config;
-            if (targetX && targetY) {
-                cfg.targetX = targetX;
-                cfg.targetY = targetY;
-            }
-
-            const btn = document.getElementById('tw-nt-instant-fire-btn');
-            if (btn) { btn.disabled = true; btn.innerText = '⏳ Disparando Ondas...'; }
-
-            UI.showNotification(`🚀 Disparando Trem de Nobres...`, 'info');
-
-            let successCount = 0;
-
-            // Onda 1: Clica no botão nativo da página
-            console.log('[TW Toolkit] 🏰 Disparando Onda 1 via clique nativo no formulário...');
-            submitBtn.click();
-            successCount++;
-            this.addLog(`✅ Onda 1 (Confirmação Nativa) enviada.`);
-
-            // Ondas de fundo (2, 3, 4...)
-            for (let i = 1; i < cfg.waves.length; i++) {
-                const wave = cfg.waves[i];
-                if (cfg.delayMs > 0) {
-                    await new Promise(r => setTimeout(r, cfg.delayMs));
-                }
-
-                try {
-                    const result = await this.sendWave(wave, cfg.targetX, cfg.targetY, TW.villageId, TW.csrf);
-                    if (result.ok) {
-                        successCount++;
-                        this.addLog(`✅ Onda ${i + 1} enviada.`);
-                    } else {
-                        this.addLog(`❌ Onda ${i + 1}: ${result.error}`);
-                    }
-                } catch (e) {
-                    this.addLog(`❌ Onda ${i + 1}: ${e.message}`);
-                }
-            }
-
-            UI.showNotification(`🏰 Trem de Nobres finalizado: ${successCount}/${cfg.waves.length} ondas enviadas!`, 'success');
-        },
-
-        async sendWave(wave, targetX, targetY, vid, h) {
-            const csrfToken = h || (typeof game_data !== 'undefined' ? game_data.csrf : TW.csrf);
-            
-            // Submete via formulário HTML real criado em iframe oculto para simular submissão do browser
-            return new Promise((resolve) => {
-                try {
-                    const iframe = document.createElement('iframe');
-                    iframe.name = 'tw_nt_frame_' + Date.now() + '_' + Math.random();
-                    iframe.style.display = 'none';
-                    document.body.appendChild(iframe);
-
-                    const form = document.createElement('form');
-                    form.method = 'POST';
-                    form.action = `/game.php?village=${vid}&screen=place&try=confirm`;
-                    form.target = iframe.name;
-
-                    const params = {
-                        x: targetX,
-                        y: targetY,
-                        attack: 'Atacar',
-                        target_type: 'coord',
-                        h: csrfToken
-                    };
-
-                    const unitOrder = ['spear', 'sword', 'axe', 'archer', 'spy', 'light', 'marcher', 'heavy', 'ram', 'catapult', 'knight', 'snob'];
-                    unitOrder.forEach(u => {
-                        params[u] = wave.troops[u] || 0;
-                    });
-
-                    Object.entries(params).forEach(([k, v]) => {
-                        const input = document.createElement('input');
-                        input.type = 'hidden';
-                        input.name = k;
-                        input.value = v;
-                        form.appendChild(input);
-                    });
-
-                    document.body.appendChild(form);
-
-                    let step = 1;
-                    iframe.onload = () => {
-                        try {
-                            const frameDoc = iframe.contentDocument || iframe.contentWindow.document;
-                            if (!frameDoc) {
-                                cleanup();
-                                resolve({ ok: false, error: 'Sem acesso ao frame' });
-                                return;
-                            }
-
-                            if (step === 1) {
-                                // Passo 1 concluído: formulário de confirmação carregou no iframe
-                                const confirmForm = frameDoc.querySelector('#command-data-form, form[action*="screen=place"]');
-                                const errorBox = frameDoc.querySelector('.error_box, .error, .info_box.error');
-                                
-                                if (errorBox) {
-                                    const errText = errorBox.innerText.trim();
-                                    cleanup();
-                                    resolve({ ok: false, error: errText });
-                                    return;
-                                }
-
-                                if (!confirmForm) {
-                                    cleanup();
-                                    resolve({ ok: false, error: 'Formulário de confirmação não retornado' });
-                                    return;
-                                }
-
-                                step = 2;
-                                const submitBtn = frameDoc.getElementById('troop_confirm_submit') || frameDoc.querySelector('input[type="submit"], button[type="submit"]');
-                                if (submitBtn) {
-                                    submitBtn.click();
-                                } else {
-                                    confirmForm.submit();
-                                }
-                            } else if (step === 2) {
-                                // Passo 2 concluído: confirmação enviada
-                                const sendErr = frameDoc.querySelector('.error_box, .error, .info_box.error');
-                                if (sendErr) {
-                                    const errText = sendErr.innerText.trim();
-                                    cleanup();
-                                    resolve({ ok: false, error: errText });
-                                    return;
-                                }
-
-                                cleanup();
-                                resolve({ ok: true });
-                            }
-                        } catch (e) {
-                            cleanup();
-                            resolve({ ok: true }); // Ignora erro de cross-origin pós navegação
-                        }
-                    };
-
-                    const cleanup = () => {
-                        setTimeout(() => {
-                            try { form.remove(); iframe.remove(); } catch(e) {}
-                        }, 1000);
-                    };
-
-                    form.submit();
-                } catch (e) {
-                    resolve({ ok: false, error: e.message });
-                }
-            });
-        },
-        
-        refreshPanel() {
-            const panel = document.getElementById('tw-panel-nobleTrain');
-            if (panel) {
-                panel.innerHTML = this.buildHTML();
-                this.bindEvents();
-            }
-        }
-    };
 
     // ═══════════════════════════════════════════════════
     // 🎯 COMMAND SNIPER (Timer de Milissegundo)
@@ -3960,7 +3704,6 @@
             FarmScheduler.resume();
             BuildQueue.bindEvents();
             BuildQueue.resume();
-            NobleTrain.init();
             CommandSniper.init();
             
             // Aplica tamanho salvo do mapa principal e marcações
