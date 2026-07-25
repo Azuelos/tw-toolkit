@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         TW Toolkit v4.1 — Tribal Wars
+// @name         TW Toolkit v4.2 — Tribal Wars
 // @namespace    tw-toolkit
-// @version      4.1.0
-// @description  Toolkit COMPLETO para Tribal Wars: Command Sniper (ms), Buscador de Farms, Planejador de Ataques, Analisador de Incoming, HUD de Recursos, Auto Farm, Trem de Nobres e mais.
+// @version      4.2.0
+// @description  Toolkit COMPLETO para Tribal Wars: Command Sniper (ms), Buscador de Farms, Planejador de Ataques, Analisador de Incoming, HUD de Recursos, Auto Farm, Trem de Nobres, Speed Mode e mais.
 // @author       TW Toolkit
 // @match        *://*.tribalwars.com.br/game.php*
 // @match        *://*.tribalwars.net/game.php*
@@ -94,7 +94,7 @@
     };
 
     const TW = {
-        version: '4.1.0',
+        version: '4.2.0',
         name: 'TW Toolkit',
         
         // Helper para acessar o contexto real da página (necessário para Tampermonkey)
@@ -535,7 +535,8 @@
                 { id: 'mapEnhancer', icon: '🗺️', label: 'Mapa' },
                 { id: 'farmScheduler', icon: '🌾', label: 'Auto Farm' },
                 { id: 'buildQueue', icon: '🏗️', label: 'Auto Build' },
-                { id: 'commandSniper', icon: '🎯', label: 'Sniper MS' }
+                { id: 'commandSniper', icon: '🎯', label: 'Sniper MS' },
+                { id: 'speed', icon: '⚡', label: 'Speed Mode' }
             ];
             
             const tabsHTML = tabs.map((t, i) => 
@@ -567,6 +568,7 @@
                     <div class="tw-panel" id="tw-panel-farmScheduler">${FarmScheduler.buildHTML()}</div>
                     <div class="tw-panel" id="tw-panel-buildQueue">${BuildQueue.buildHTML()}</div>
                     <div class="tw-panel" id="tw-panel-commandSniper">${CommandSniper.buildHTML()}</div>
+                    <div class="tw-panel" id="tw-panel-speed">${SpeedManager.buildHTML()}</div>
                 </div>
             `;
         },
@@ -3663,6 +3665,506 @@
     };
 
     // ═══════════════════════════════════════════════════
+    // ⚡ SPEED MANAGER (Modo Speed - Automação Avançada)
+    // ═══════════════════════════════════════════════════
+    
+    const SpeedManager = {
+        KEY: 'tw_speed_manager',
+        timerId: null,
+        isProcessing: false,
+        
+        get defaultConfig() {
+            return {
+                running: false,
+                checkInterval: 5,
+                targetBlacksmith: 20,
+                targetAcademy: 1,
+                targetTroops: {
+                    axe: 6000,
+                    light: 800,
+                    ram: 200
+                },
+                conquerBarbarians: true,
+                withdrawSupport: true,
+                log: []
+            };
+        },
+
+        get config() {
+            try {
+                const stored = JSON.parse(localStorage.getItem(this.KEY));
+                return { ...this.defaultConfig, ...stored, targetTroops: { ...this.defaultConfig.targetTroops, ...(stored?.targetTroops || {}) } };
+            } catch {
+                return this.defaultConfig;
+            }
+        },
+
+        save(cfg) {
+            try { localStorage.setItem(this.KEY, JSON.stringify(cfg)); } catch(e) {}
+        },
+
+        addLog(msg) {
+            const cfg = this.config;
+            const time = new Date().toLocaleTimeString('pt-BR');
+            cfg.log.unshift(`[${time}] ${msg}`);
+            if (cfg.log.length > 50) cfg.log = cfg.log.slice(0, 50);
+            this.save(cfg);
+            this.updateLogUI();
+        },
+
+        updateLogUI() {
+            const logContainer = document.getElementById('tw-speed-logs');
+            if (logContainer) {
+                const logs = this.config.log;
+                logContainer.innerHTML = logs.length ? logs.map(l => `<div style="padding:2px 0;border-bottom:1px solid #2a1a0a;">${l}</div>`).join('') : '<span style="color:#888">Nenhum log registrado ainda.</span>';
+            }
+        },
+
+        async toggle(forceState) {
+            const cfg = this.config;
+            cfg.running = forceState !== undefined ? forceState : !cfg.running;
+            this.save(cfg);
+            this.updateStatusUI();
+
+            if (cfg.running) {
+                this.addLog('⚡ Speed Mode ATIVADO!');
+                UI.showNotification('⚡ Speed Mode ATIVADO! Processando automações...', 'success');
+                this.start();
+            } else {
+                this.addLog('🛑 Speed Mode DESATIVADO.');
+                UI.showNotification('🛑 Speed Mode Desativado.', 'info');
+                this.stop();
+            }
+        },
+
+        start() {
+            this.stop();
+            const intervalMs = Math.max(3, (this.config.checkInterval || 5)) * 1000;
+            this.runCycle();
+            this.timerId = setInterval(() => this.runCycle(), intervalMs);
+        },
+
+        stop() {
+            if (this.timerId) {
+                clearInterval(this.timerId);
+                this.timerId = null;
+            }
+        },
+
+        resume() {
+            if (this.config.running) {
+                this.start();
+            }
+        },
+
+        async fetchDoc(url) {
+            const resp = await fetch(url, { credentials: 'same-origin' });
+            const html = await resp.text();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const csrfMatch = html.match(/csrf_token\s*=\s*['"]([a-f0-9]+)['"]/i) || 
+                              html.match(/csrf['"]\s*:\s*['"]([a-f0-9]+)['"]/i) ||
+                              html.match(/h=([a-f0-9]+)/i);
+            const csrf = csrfMatch ? csrfMatch[1] : (typeof game_data !== 'undefined' ? game_data.csrf : TW.csrf);
+            return { doc, html, csrf };
+        },
+
+        async runCycle() {
+            if (this.isProcessing) return;
+            this.isProcessing = true;
+            try {
+                const villages = await this.getVillageList();
+                if (!villages || !villages.length) {
+                    this.isProcessing = false;
+                    return;
+                }
+
+                for (const v of villages) {
+                    if (!this.config.running) break;
+                    await this.processVillage(v);
+                }
+            } catch (err) {
+                console.error('[SpeedManager] Erro no ciclo:', err);
+            } finally {
+                this.isProcessing = false;
+            }
+        },
+
+        async getVillageList() {
+            if (typeof game_data !== 'undefined' && game_data.player && game_data.player.villages && parseInt(game_data.player.villages) > 0) {
+                const w = TW._getPageWindow();
+                if (w.game_data && w.game_data.player && w.game_data.player.village_ids) {
+                    return w.game_data.player.village_ids.map(id => ({ id: parseInt(id) }));
+                }
+            }
+            try {
+                const { doc } = await this.fetchDoc('/game.php?screen=overview_villages');
+                const vLinks = doc.querySelectorAll('a[href*="village="][href*="screen=overview"]');
+                const villages = [];
+                const idsFound = new Set();
+                vLinks.forEach(link => {
+                    const match = link.href.match(/village=(\d+)/);
+                    if (match && !idsFound.has(match[1])) {
+                        idsFound.add(match[1]);
+                        villages.push({ id: parseInt(match[1]), name: link.textContent.trim() });
+                    }
+                });
+                if (villages.length) return villages;
+            } catch (e) {}
+
+            return [{ id: TW.villageId, name: TW.village.name }];
+        },
+
+        async processVillage(v) {
+            const vid = v.id;
+            const cfg = this.config;
+
+            await this.processBuildings(vid);
+            await this.processTroopsAndResearch(vid);
+            await this.processCoinsAndNobles(vid);
+
+            if (cfg.conquerBarbarians) {
+                await this.processConquest(vid);
+            }
+
+            if (cfg.withdrawSupport) {
+                await this.processWithdrawSupport(vid);
+            }
+        },
+
+        async processBuildings(vid) {
+            try {
+                const { doc } = await this.fetchDoc(`/game.php?village=${vid}&screen=main`);
+                const queueTable = doc.querySelector('#buildqueue');
+                const queueCount = queueTable ? queueTable.querySelectorAll('tr.buildorder_building, tr[id^="buildorder_"]').length : 0;
+                
+                if (queueCount >= 2) return;
+
+                const smithRow = doc.querySelector('#main_buildrow_smith');
+                let smithLevel = 0;
+                if (smithRow) {
+                    const lvlEl = smithRow.querySelector('.building_level, td:nth-child(2)');
+                    if (lvlEl) {
+                        const m = lvlEl.textContent.match(/(\d+)/);
+                        if (m) smithLevel = parseInt(m[1]);
+                    }
+                }
+
+                if (smithLevel < this.config.targetBlacksmith) {
+                    const btn = smithRow?.querySelector('a.btn-build, a.main_buildlink');
+                    if (btn) {
+                        const href = btn.getAttribute('href');
+                        await fetch(href, { credentials: 'same-origin' });
+                        this.addLog(`🏗️ Aldeia #${vid}: Evoluindo Ferreiro para Nv.${smithLevel + 1}`);
+                        return;
+                    }
+                } else {
+                    const snobRow = doc.querySelector('#main_buildrow_snob');
+                    let snobLevel = 0;
+                    if (snobRow) {
+                        const lvlEl = snobRow.querySelector('.building_level, td:nth-child(2)');
+                        if (lvlEl) {
+                            const m = lvlEl.textContent.match(/(\d+)/);
+                            if (m) snobLevel = parseInt(m[1]);
+                        }
+                        if (snobLevel < this.config.targetAcademy) {
+                            const btn = snobRow.querySelector('a.btn-build, a.main_buildlink');
+                            if (btn) {
+                                const href = btn.getAttribute('href');
+                                await fetch(href, { credentials: 'same-origin' });
+                                this.addLog(`🎓 Aldeia #${vid}: Construindo Academia!`);
+                            }
+                        }
+                    }
+                }
+            } catch(e) {
+                console.error('[SpeedManager] Erro processBuildings:', e);
+            }
+        },
+
+        async processTroopsAndResearch(vid) {
+            const targets = this.config.targetTroops;
+            try {
+                if (targets.axe > 0) {
+                    const { doc } = await this.fetchDoc(`/game.php?village=${vid}&screen=barracks`);
+                    const input = doc.querySelector('input[name="axe"]');
+                    if (input) {
+                        const form = doc.querySelector('form[action*="action=train"]');
+                        if (form) {
+                            const currentCount = parseInt(doc.querySelector('#units_home_axe')?.textContent || '0');
+                            if (currentCount < targets.axe) {
+                                const needed = Math.min(100, targets.axe - currentCount);
+                                const formData = new FormData(form);
+                                formData.set('axe', needed);
+                                await fetch(form.action, { method: 'POST', body: formData, credentials: 'same-origin' });
+                                this.addLog(`⚔️ Aldeia #${vid}: Recrutando ${needed} Bárbaros`);
+                            }
+                        }
+                    }
+                }
+
+                if (targets.light > 0) {
+                    const { doc } = await this.fetchDoc(`/game.php?village=${vid}&screen=stable`);
+                    const input = doc.querySelector('input[name="light"]');
+                    if (input) {
+                        const form = doc.querySelector('form[action*="action=train"]');
+                        if (form) {
+                            const currentCount = parseInt(doc.querySelector('#units_home_light')?.textContent || '0');
+                            if (currentCount < targets.light) {
+                                const needed = Math.min(30, targets.light - currentCount);
+                                const formData = new FormData(form);
+                                formData.set('light', needed);
+                                await fetch(form.action, { method: 'POST', body: formData, credentials: 'same-origin' });
+                                this.addLog(`🐎 Aldeia #${vid}: Recrutando ${needed} Cavalaria Leve`);
+                            }
+                        }
+                    }
+                }
+
+                if (targets.ram > 0) {
+                    const { doc } = await this.fetchDoc(`/game.php?village=${vid}&screen=garage`);
+                    const input = doc.querySelector('input[name="ram"]');
+                    if (input) {
+                        const form = doc.querySelector('form[action*="action=train"]');
+                        if (form) {
+                            const currentCount = parseInt(doc.querySelector('#units_home_ram')?.textContent || '0');
+                            if (currentCount < targets.ram) {
+                                const needed = Math.min(10, targets.ram - currentCount);
+                                const formData = new FormData(form);
+                                formData.set('ram', needed);
+                                await fetch(form.action, { method: 'POST', body: formData, credentials: 'same-origin' });
+                                this.addLog(`🪵 Aldeia #${vid}: Recrutando ${needed} Aríetes`);
+                            }
+                        }
+                    }
+                }
+            } catch(e) {
+                console.error('[SpeedManager] Erro processTroopsAndResearch:', e);
+            }
+        },
+
+        async processCoinsAndNobles(vid) {
+            try {
+                const { doc } = await this.fetchDoc(`/game.php?village=${vid}&screen=snob`);
+                const coinForm = doc.querySelector('form[action*="action=coin"]');
+                if (coinForm) {
+                    const formData = new FormData(coinForm);
+                    await fetch(coinForm.action, { method: 'POST', body: formData, credentials: 'same-origin' });
+                    this.addLog(`🪙 Aldeia #${vid}: Cunhando moeda de ouro!`);
+                }
+
+                const snobInput = doc.querySelector('input[name="snob"]');
+                if (snobInput) {
+                    const trainForm = doc.querySelector('form[action*="action=train"]');
+                    if (trainForm) {
+                        const formData = new FormData(trainForm);
+                        formData.set('snob', 1);
+                        await fetch(trainForm.action, { method: 'POST', body: formData, credentials: 'same-origin' });
+                        this.addLog(`👑 Aldeia #${vid}: Recrutando NOBRE!`);
+                    }
+                }
+            } catch(e) {
+                console.error('[SpeedManager] Erro processCoinsAndNobles:', e);
+            }
+        },
+
+        async processConquest(vid) {
+            try {
+                const { doc } = await this.fetchDoc(`/game.php?village=${vid}&screen=place`);
+                const snobCount = parseInt(doc.querySelector('#unit_input_snob')?.nextElementSibling?.textContent.replace(/\(|\)/g, '') || '0');
+                if (snobCount < 1) return;
+
+                const barbCoord = await this.findNearestBarbarian();
+                if (!barbCoord) return;
+
+                const axeCount = parseInt(doc.querySelector('#unit_input_axe')?.nextElementSibling?.textContent.replace(/\(|\)/g, '') || '0');
+                const lightCount = parseInt(doc.querySelector('#unit_input_light')?.nextElementSibling?.textContent.replace(/\(|\)/g, '') || '0');
+                const ramCount = parseInt(doc.querySelector('#unit_input_ram')?.nextElementSibling?.textContent.replace(/\(|\)/g, '') || '0');
+
+                const form = doc.querySelector('#command-data-form');
+                if (form) {
+                    const formData = new FormData(form);
+                    formData.set('x', barbCoord.x);
+                    formData.set('y', barbCoord.y);
+                    formData.set('snob', 1);
+                    if (axeCount > 0) formData.set('axe', axeCount);
+                    if (lightCount > 0) formData.set('light', lightCount);
+                    if (ramCount > 0) formData.set('ram', ramCount);
+                    formData.set('attack', 'Ataque');
+
+                    const resp1 = await fetch(form.action || `/game.php?village=${vid}&screen=place&action=command`, {
+                        method: 'POST',
+                        body: formData,
+                        credentials: 'same-origin'
+                    });
+                    const html1 = await resp1.text();
+                    const parser1 = new DOMParser();
+                    const doc1 = parser1.parseFromString(html1, 'text/html');
+
+                    const confirmForm = doc1.querySelector('#command-data-form, form[action*="action=command"]');
+                    if (confirmForm) {
+                        const confirmData = new FormData(confirmForm);
+                        await fetch(confirmForm.action, { method: 'POST', body: confirmData, credentials: 'same-origin' });
+                        this.addLog(`🚀 Aldeia #${vid}: ATAQUE DE CONQUISTA enviado para Bárbara (${barbCoord.x}|${barbCoord.y}) com 1 Nobre + Tropas!`);
+                    }
+                }
+            } catch(e) {
+                console.error('[SpeedManager] Erro processConquest:', e);
+            }
+        },
+
+        async findNearestBarbarian() {
+            try {
+                if (typeof FarmFinder !== 'undefined' && FarmFinder.barbarians && FarmFinder.barbarians.length) {
+                    return FarmFinder.barbarians[0];
+                }
+            } catch(e) {}
+            return null;
+        },
+
+        async processWithdrawSupport(vid) {
+            try {
+                const { doc } = await this.fetchDoc(`/game.php?village=${vid}&screen=place&mode=units`);
+                const withdrawLinks = doc.querySelectorAll('a[href*="action=back"], input[name="back"], button[name="back"]');
+                for (const el of withdrawLinks) {
+                    if (el.tagName === 'A') {
+                        await fetch(el.getAttribute('href'), { credentials: 'same-origin' });
+                        this.addLog(`↩️ Aldeia #${vid}: Retornando tropas de apoio de volta para casa!`);
+                    } else if (el.form) {
+                        const formData = new FormData(el.form);
+                        await fetch(el.form.action, { method: 'POST', body: formData, credentials: 'same-origin' });
+                        this.addLog(`↩️ Aldeia #${vid}: Retornando tropas de apoio de volta para casa!`);
+                    }
+                }
+            } catch(e) {
+                console.error('[SpeedManager] Erro processWithdrawSupport:', e);
+            }
+        },
+
+        updateStatusUI() {
+            const btn = document.getElementById('tw-speed-toggle-btn');
+            const statusBadge = document.getElementById('tw-speed-status-badge');
+            const isRunning = this.config.running;
+
+            if (btn) {
+                btn.textContent = isRunning ? '🛑 PAUSAR SPEED MODE' : '⚡ INICIAR SPEED MODE';
+                btn.style.background = isRunning ? 'linear-gradient(to bottom, #d32f2f, #9a0007)' : 'linear-gradient(to bottom, #2e7d32, #1b5e20)';
+            }
+            if (statusBadge) {
+                statusBadge.textContent = isRunning ? '⚡ EM EXECUÇÃO' : '⏸️ PAUSADO';
+                statusBadge.style.color = isRunning ? '#81c784' : '#ffb74d';
+            }
+        },
+
+        bindEvents() {
+            const toggleBtn = document.getElementById('tw-speed-toggle-btn');
+            if (toggleBtn) {
+                toggleBtn.onclick = () => this.toggle();
+            }
+
+            const saveCfgBtn = document.getElementById('tw-speed-save-cfg');
+            if (saveCfgBtn) {
+                saveCfgBtn.onclick = () => {
+                    const cfg = this.config;
+                    cfg.targetTroops.axe = parseInt(document.getElementById('tw-speed-target-axe')?.value) || 6000;
+                    cfg.targetTroops.light = parseInt(document.getElementById('tw-speed-target-light')?.value) || 800;
+                    cfg.targetTroops.ram = parseInt(document.getElementById('tw-speed-target-ram')?.value) || 200;
+                    cfg.checkInterval = parseInt(document.getElementById('tw-speed-interval')?.value) || 5;
+                    cfg.conquerBarbarians = document.getElementById('tw-speed-auto-conquer')?.checked ?? true;
+                    cfg.withdrawSupport = document.getElementById('tw-speed-auto-withdraw')?.checked ?? true;
+                    this.save(cfg);
+                    UI.showNotification('💾 Configurações do Speed Mode salvas!', 'success');
+                    if (cfg.running) this.start();
+                };
+            }
+
+            const clearLogBtn = document.getElementById('tw-speed-clear-log');
+            if (clearLogBtn) {
+                clearLogBtn.onclick = () => {
+                    const cfg = this.config;
+                    cfg.log = [];
+                    this.save(cfg);
+                    this.updateLogUI();
+                    UI.showNotification('🧹 Logs limpos!', 'info');
+                };
+            }
+        },
+
+        buildHTML() {
+            const cfg = this.config;
+            const isRunning = cfg.running;
+            return `
+                <div class="tw-card">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;border-bottom:1px solid #5a3a1a;padding-bottom:8px;">
+                        <h3 style="margin:0;color:#ffd700;display:flex;align-items:center;gap:8px">⚡ Speed Mode (Automação de Expansão)</h3>
+                        <span id="tw-speed-status-badge" style="font-weight:bold;font-size:12px;color:${isRunning ? '#81c784' : '#ffb74d'}">
+                            ${isRunning ? '⚡ EM EXECUÇÃO' : '⏸️ PAUSADO'}
+                        </span>
+                    </div>
+
+                    <p style="font-size:12px;color:#a08060;margin-bottom:12px">
+                        Módulo especializado para <b>Mundos Speed</b>: evolui o Ferreiro até o Nv.20, constrói a Academia, cunha moedas, treina Nobres e tropas de ataque, conquista Bárbaras e recolhe tropas de apoio automaticamente!
+                    </p>
+
+                    <div style="display:flex;gap:10px;margin-bottom:14px">
+                        <button id="tw-speed-toggle-btn" class="tw-btn" style="flex:2;font-size:13px;font-weight:bold;padding:10px;background:${isRunning ? 'linear-gradient(to bottom, #d32f2f, #9a0007)' : 'linear-gradient(to bottom, #2e7d32, #1b5e20)'}">
+                            ${isRunning ? '🛑 PAUSAR SPEED MODE' : '⚡ INICIAR SPEED MODE'}
+                        </button>
+                    </div>
+
+                    <div style="background:#1a0a00;border:1px solid #5a3a1a;padding:12px;border-radius:6px;margin-bottom:14px">
+                        <h4 style="color:#ffd700;margin-top:0;margin-bottom:10px">⚙️ Configurações & Metas</h4>
+
+                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
+                            <div>
+                                <label style="font-size:11px;color:#a08060;display:block">🪓 Meta Bárbaros:</label>
+                                <input type="number" id="tw-speed-target-axe" value="${cfg.targetTroops.axe}" style="width:100%;padding:4px;background:#0d0500;border:1px solid #8a5a2a;color:#ffd700;border-radius:3px">
+                            </div>
+                            <div>
+                                <label style="font-size:11px;color:#a08060;display:block">🐎 Meta Cav. Leve:</label>
+                                <input type="number" id="tw-speed-target-light" value="${cfg.targetTroops.light}" style="width:100%;padding:4px;background:#0d0500;border:1px solid #8a5a2a;color:#ffd700;border-radius:3px">
+                            </div>
+                            <div>
+                                <label style="font-size:11px;color:#a08060;display:block">🪵 Meta Aríetes:</label>
+                                <input type="number" id="tw-speed-target-ram" value="${cfg.targetTroops.ram}" style="width:100%;padding:4px;background:#0d0500;border:1px solid #8a5a2a;color:#ffd700;border-radius:3px">
+                            </div>
+                        </div>
+
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+                            <div>
+                                <label style="font-size:11px;color:#a08060;display:block">⏱️ Intervalo de Checagem (seg):</label>
+                                <input type="number" id="tw-speed-interval" value="${cfg.checkInterval || 5}" min="3" style="width:100%;padding:4px;background:#0d0500;border:1px solid #8a5a2a;color:#ffd700;border-radius:3px">
+                            </div>
+                            <div style="display:flex;flex-direction:column;justify-content:flex-end">
+                                <button id="tw-speed-save-cfg" class="tw-btn" style="width:100%">💾 Salvar Metas</button>
+                            </div>
+                        </div>
+
+                        <div style="display:flex;gap:15px;margin-top:8px">
+                            <label style="font-size:11px;color:#f0e0c0;cursor:pointer;display:flex;align-items:center;gap:4px">
+                                <input type="checkbox" id="tw-speed-auto-conquer" ${cfg.conquerBarbarians ? 'checked' : ''}> 🏰 Conquistar Bárbaras Automático
+                            </label>
+                            <label style="font-size:11px;color:#f0e0c0;cursor:pointer;display:flex;align-items:center;gap:4px">
+                                <input type="checkbox" id="tw-speed-auto-withdraw" ${cfg.withdrawSupport ? 'checked' : ''}> ↩️ Devolver Apoios Automático
+                            </label>
+                        </div>
+                    </div>
+
+                    <div style="background:#100600;border:1px solid #3a220f;padding:10px;border-radius:6px">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                            <h4 style="color:#ffd700;margin:0;font-size:12px">📋 Logs de Automação Speed</h4>
+                            <button id="tw-speed-clear-log" class="tw-btn" style="font-size:10px;padding:2px 6px">🧹 Limpar Logs</button>
+                        </div>
+                        <div id="tw-speed-logs" style="max-height:160px;overflow-y:auto;font-family:monospace;font-size:11px;color:#d0c0a0">
+                            ${cfg.log.length ? cfg.log.map(l => `<div style="padding:2px 0;border-bottom:1px solid #2a1a0a;">${l}</div>`).join('') : '<span style="color:#888">Nenhum log registrado ainda.</span>'}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+    };
+
+    // ═══════════════════════════════════════════════════
     // 🚀 INICIALIZAÇÃO (com restauração de estado)
     // ═══════════════════════════════════════════════════
     
@@ -3671,7 +4173,6 @@
             console.log('[TW Toolkit] init() chamada...');
             
             if (!TW.gameData) {
-                // Se game_data ainda não carregou, tenta de novo em 500ms (máx 10x)
                 if (!window.__TW_TOOLKIT_RETRIES__) window.__TW_TOOLKIT_RETRIES__ = 0;
                 if (window.__TW_TOOLKIT_RETRIES__++ < 10) {
                     console.log('[TW Toolkit] game_data não encontrado, tentando novamente... (' + window.__TW_TOOLKIT_RETRIES__ + '/10)');
@@ -3684,27 +4185,23 @@
             
             console.log('[TW Toolkit] game_data encontrado. Premium:', TW.isPremium, '| FarmAssistant:', TW.hasFarmAssistant);
             
-            // Injeta botão flutuante (sempre visível)
             UI.injectFloatingButton();
             console.log('[TW Toolkit] Botão flutuante injetado.');
             
-            // Injeta toolkit (inicialmente oculto)
             UI.inject();
             console.log('[TW Toolkit] Painel injetado.');
             
-            // Ativa Resource HUD (overlay de recursos)
             ResourceHUD.inject();
-            
-            // Ativa atalhos de teclado
             Hotkeys.init();
             
-            // Ativa novos módulos
             MapEnhancer.bindEvents();
             FarmScheduler.bindEvents();
             FarmScheduler.resume();
             BuildQueue.bindEvents();
             BuildQueue.resume();
             CommandSniper.init();
+            SpeedManager.bindEvents();
+            SpeedManager.resume();
             
             // Aplica tamanho salvo do mapa principal e marcações
             if (TW.screen === 'map') {
