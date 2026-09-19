@@ -5,6 +5,7 @@ Toolkit em JavaScript (Client-side / Userscript / Quickbar) para o jogo Tribal W
 
 ## Estrutura do Projeto
 - `tw_overdosee_toolkit.js`: Script principal contendo toda a lógica de UI, módulos (FarmFinder, AutoFarm, AttackPlanner, CommandSniper, NobleTrain, ResourceHUD, IncomingAnalyzer) e integração com o jogo via `game_data` e DOM.
+- `overwatch-tropas.js`: Exporta texto copia-e-cola com cada jogador, aldeias, tropas em casa e a caminho (página oficial Defesa dos membros).
 - Repositório remoto: GitHub `Azuelos/tw-toolkit` servido via CDN jsDelivr.
 
 ## Módulos
