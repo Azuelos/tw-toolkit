@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Overwatch Tropas — censo em texto
 // @namespace    tw-toolkit
-// @version      1.0.0
+// @version      1.0.1
 // @description  Exporta, por jogador e aldeia, tropas em casa e a caminho (página oficial Defesa dos membros).
 // @author       TW Toolkit
 // @match        *://*.tribalwars.com.br/game.php*
@@ -46,6 +46,26 @@
     return m ? `k${Math.floor(Number(m[2]) / 100)}${Math.floor(Number(m[1]) / 100)}` : "";
   }
 
+  function extractCoord(cell) {
+    if (!cell) return "";
+    const text = (cell.innerText || cell.textContent || "").replace(/\s+/g, " ");
+    const paren = text.match(/\((\d{1,3}\|\d{1,3})\)/);
+    if (paren) return paren[1];
+    const $cell = $(cell);
+    const dataCoord = $cell.find("[data-coord]").attr("data-coord");
+    if (dataCoord && /^\d{1,3}\|\d{1,3}$/.test(dataCoord)) return dataCoord;
+    const href = $cell.find("a[href]").map(function () {
+      return this.getAttribute("href") || "";
+    }).get().join(" ");
+    const fromQuery = href.match(/[?&]x=(\d{1,3}).*[?&]y=(\d{1,3})/);
+    if (fromQuery) return fromQuery[1] + "|" + fromQuery[2];
+    const fromHash = href.match(/#(\d{1,3})[;|](\d{1,3})/);
+    if (fromHash) return fromHash[1] + "|" + fromHash[2];
+    const all = text.match(/\d{1,3}\|\d{1,3}/g) || [];
+    if (all.length > 1) return all[all.length - 1];
+    return all[0] || "";
+  }
+
   function listNum(i) {
     return String(i).padStart(2, "0");
   }
@@ -58,16 +78,19 @@
   }
 
   function parseDefense(html) {
-    const $doc = $(html);
+    const $doc = $("<div>").append($.parseHTML(html));
     const playerName = $doc.find(".input-nicer option:selected").text().trim() || "Jogador";
-    const rows = $doc.find(".table-responsive table tr:not(:first)");
+    const $tables = $doc.find("#ally_content .table-responsive table");
+    const $table = $tables.length ? $tables.last() : $doc.find(".table-responsive table").last();
+    const rows = $table.find("tr").slice(1);
     const villages = [];
     for (let i = 0; i < rows.length / 2; i += 1) {
       const home = rows[i * 2];
       const road = rows[i * 2 + 1];
-      if (!home || !road || !home.children || !home.children[0]) continue;
-      const coordMatch = home.children[0].innerText.match(/\d+\|\d+/);
-      if (!coordMatch) continue;
+      if (!home || !road) continue;
+      const nameCell = home.cells ? home.cells[0] : home.children[0];
+      const coord = extractCoord(nameCell);
+      if (!coord) continue;
       const unitsInVillage = {};
       const unitsEnroute = {};
       units.forEach((unit, j) => {
@@ -75,7 +98,7 @@
         const raw = (road.children[j + 1] && road.children[j + 1].innerText.trim()) || "0";
         unitsEnroute[unit] = raw === "?" ? "0" : raw;
       });
-      villages.push({ coord: coordMatch[0], unitsInVillage, unitsEnroute });
+      villages.push({ coord, unitsInVillage, unitsEnroute });
     }
     return { playerName, villages };
   }
