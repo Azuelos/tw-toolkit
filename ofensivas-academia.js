@@ -1,6 +1,6 @@
 (function () {
   if (typeof game_data === "undefined" || typeof $ === "undefined") {
-    alert("Corre este script dentro do Tribal Wars, na conta da tribo.");
+    alert("Corre este script dentro do Tribal Wars, na tua conta.");
     return;
   }
   if ($("#nomadesOfensivasBox").length) {
@@ -8,39 +8,13 @@
     return;
   }
 
-  const PAUSE = 250;
   const MIN_OFF = 9000;
   const MIN_OFF_HEAVY = 18000;
   let busy = false;
-  let gameTribe = "";
 
   function kOf(coord) {
     const m = String(coord || "").match(/^(\d{1,3})\|(\d{1,3})$/);
     return m ? `k${Math.floor(Number(m[2]) / 100)}${Math.floor(Number(m[1]) / 100)}` : "";
-  }
-
-  function extractCoord(cell) {
-    if (!cell) return "";
-    const text = (cell.innerText || cell.textContent || "").replace(/\s+/g, " ");
-    const paren = text.match(/\((\d{1,3}\|\d{1,3})\)/);
-    if (paren) return paren[1];
-    const $cell = $(cell);
-    const dataCoord = $cell.find("[data-coord]").attr("data-coord");
-    if (dataCoord && /^\d{1,3}\|\d{1,3}$/.test(dataCoord)) return dataCoord;
-    const href = $cell.find("a[href]").map(function () {
-      return this.getAttribute("href") || "";
-    }).get().join(" ");
-    const fromQuery = href.match(/[?&]x=(\d{1,3}).*[?&]y=(\d{1,3})/);
-    if (fromQuery) return fromQuery[1] + "|" + fromQuery[2];
-    const fromHash = href.match(/#(\d{1,3})[;|](\d{1,3})/);
-    if (fromHash) return fromHash[1] + "|" + fromHash[2];
-    const all = text.match(/\d{1,3}\|\d{1,3}/g) || [];
-    if (all.length > 1) return all[all.length - 1];
-    return all[0] || "";
-  }
-
-  function cellText(node) {
-    return node ? String(node.innerText || node.textContent || "").trim() : "";
   }
 
   function parseCount(text) {
@@ -48,156 +22,183 @@
     return Number.isFinite(n) ? n : 0;
   }
 
-  function unitAt(map, key) {
-    return parseCount(map && map[key]);
+  function offPop(axe, light, ram) {
+    return (Number(axe) || 0) + (Number(light) || 0) * 4 + (Number(ram) || 0) * 5;
   }
 
-  // Mesma fórmula das Metas (goals.js ataqueOf): B + CL*4 + Ar*5
-  function offPop(map) {
-    return unitAt(map, "axe") + unitAt(map, "light") * 4 + unitAt(map, "ram") * 5;
+  function sitterQuery() {
+    return game_data.player && Number(game_data.player.sitter) > 0
+      ? "&t=" + encodeURIComponent(game_data.player.id)
+      : "";
   }
 
-  function tribeLine() {
-    return gameTribe ? `Tribo no jogo: ${gameTribe}` : "";
+  function param(name) {
+    return new URLSearchParams(location.search).get(name) || "";
   }
 
-  function wait(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  function coordOf(text) {
+    const all = String(text || "").match(/\d{1,3}\|\d{1,3}/g) || [];
+    if (all.length > 1) return all[all.length - 1];
+    return all[0] || "";
   }
 
-  function memberIdsFromHtml(html) {
-    return $(html).find(".input-nicer option:not(:first)").map(function () {
-      return this.value;
-    }).get().filter(Boolean);
-  }
-
-  function parseTroops(html) {
-    const $doc = $("<div>").append($.parseHTML(html));
-    const playerName = $doc.find(".input-nicer option:selected").text().trim() || "Jogador";
-    const $tables = $doc.find("#ally_content .table-responsive table");
-    const $table = $tables.length ? $tables.last() : $doc.find(".table-responsive table").last();
-    const rows = $table.find("tr").slice(1);
-    const villages = [];
-    const units = game_data.units || [];
-    for (let i = 0; i < rows.length / 2; i += 1) {
-      const home = rows[i * 2];
-      const road = rows[i * 2 + 1];
-      if (!home || !road) continue;
-      const nameCell = home.cells ? home.cells[0] : home.children[0];
-      const coord = extractCoord(nameCell);
-      if (!coord) continue;
-      const unitsInVillage = {};
-      units.forEach((unit, j) => {
-        unitsInVillage[unit] = (home.children[j + 3] && home.children[j + 3].innerText.trim()) || "0";
-      });
-      villages.push({
-        coord,
-        axe: unitAt(unitsInVillage, "axe"),
-        light: unitAt(unitsInVillage, "light"),
-        ram: unitAt(unitsInVillage, "ram"),
-        pop: offPop(unitsInVillage),
-      });
+  function villageRef(row) {
+    const vn = row.querySelector && row.querySelector(".quickedit-vn");
+    if (vn) {
+      return {
+        id: String(vn.getAttribute("data-id") || "").replace(/\D/g, ""),
+        coord: coordOf(vn.textContent),
+      };
     }
-    return { playerName, villages };
-  }
-
-  function headerBlob(th) {
-    const $th = $(th);
-    const img = $th.find("img")[0];
-    return [
-      cellText(th),
-      img && img.getAttribute("src"),
-      img && img.getAttribute("title"),
-      img && img.getAttribute("alt"),
-      img && img.getAttribute("data-title"),
-    ].filter(Boolean).join(" ");
-  }
-
-  function findAcademyCol($table) {
-    const headers = $table.find("tr").first().find("th, td");
-    let idx = -1;
-    headers.each(function (i) {
-      const blob = headerBlob(this);
-      if (/snob|academia|academy|building\/snob|buildings\/snob/i.test(blob)) {
-        idx = i;
-        return false;
-      }
-    });
-    return idx;
-  }
-
-  function academyLevelFromCell(cell) {
-    if (!cell) return 0;
-    const $cell = $(cell);
-    if ($cell.find(".hidden, .inactive").length && !/\d/.test(cellText(cell))) return 0;
-    return parseCount(cellText(cell));
-  }
-
-  function parseBuildings(html) {
-    const $doc = $("<div>").append($.parseHTML(html));
-    const playerName = $doc.find(".input-nicer option:selected").text().trim() || "Jogador";
-    const $tables = $doc.find("#ally_content .table-responsive table");
-    const $table = $tables.length ? $tables.last() : $doc.find(".table-responsive table, #ally_content table.vis").last();
-    const academyByCoord = {};
-    if (!$table.length) return { playerName, academyByCoord, hasAcademyCol: false };
-
-    const academyCol = findAcademyCol($table);
-    const rows = $table.find("tr").slice(1);
-    let hasAcademyCol = academyCol >= 0;
-
-    rows.each(function () {
-      const cells = this.cells || this.children;
-      if (!cells || !cells.length) return;
-      const coord = extractCoord(cells[0]);
-      if (!coord) return;
-      let level = 0;
-      const classCell = $(this).find("td.b_snob, td[data-building='snob'], [class*='b_snob']").first()[0];
-      if (classCell) {
-        hasAcademyCol = true;
-        level = academyLevelFromCell(classCell);
-      } else if (academyCol >= 0 && cells[academyCol]) {
-        level = academyLevelFromCell(cells[academyCol]);
-      }
-      academyByCoord[coord] = level;
-    });
-
-    return { playerName, academyByCoord, hasAcademyCol };
-  }
-
-  function mergePlayer(troops, buildings) {
-    const academyByCoord = (buildings && buildings.academyByCoord) || {};
-    const villages = (troops.villages || []).map((v) => ({
-      ...v,
-      academy: Number(academyByCoord[v.coord]) || 0,
-      playerName: troops.playerName,
-    }));
+    const link = row.querySelector && row.querySelector("a[href*='village=']");
+    const href = link ? String(link.getAttribute("href") || "") : "";
+    const text = row.innerText || row.textContent || "";
     return {
-      playerName: troops.playerName,
-      hasAcademyCol: Boolean(buildings && buildings.hasAcademyCol),
-      villages,
+      id: (href.match(/[?&]village=(\d+)/) || [])[1] || "",
+      coord: coordOf(text),
     };
   }
 
-  function pickHits(players, minPop) {
-    const hits = [];
-    for (const p of players || []) {
-      for (const v of p.villages || []) {
-        if ((Number(v.academy) || 0) < 1) continue;
-        if ((Number(v.pop) || 0) <= minPop) continue;
-        hits.push(v);
+  function headerCol(doc, re) {
+    const tables = [...doc.querySelectorAll("#buildings_table, #units_table, table.overview_table, table.vis")];
+    for (let t = 0; t < tables.length; t += 1) {
+      const headers = [...tables[t].querySelectorAll("thead th, tr:first-child th")];
+      for (let i = 0; i < headers.length; i += 1) {
+        const img = headers[i].querySelector("img");
+        const blob = [
+          headers[i].textContent,
+          img && img.getAttribute("src"),
+          img && img.getAttribute("title"),
+          img && img.getAttribute("alt"),
+        ].filter(Boolean).join(" ");
+        if (re.test(blob)) return { table: tables[t], index: i };
       }
     }
-    hits.sort((a, b) => (b.pop || 0) - (a.pop || 0) || String(a.coord).localeCompare(String(b.coord)));
-    return hits;
+    return null;
+  }
+
+  function unitHeadsFromTable(tableHtml) {
+    const heads = [];
+    const re = /unit_([a-z]+)\.(?:webp|png)/gi;
+    let m;
+    while ((m = re.exec(String(tableHtml || "")))) {
+      if (!heads.includes(m[1])) heads.push(m[1]);
+    }
+    return heads;
+  }
+
+  function parseBuildingsHtml(html) {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const byCoord = {};
+    const byId = {};
+    const found = headerCol(doc, /snob|academia|academy|buildings\/snob|building\/snob/i);
+    const rows = [...doc.querySelectorAll("#buildings_table tr, table.overview_table tr, table.vis tr")];
+    let hits = 0;
+    for (let i = 0; i < rows.length; i += 1) {
+      const ref = villageRef(rows[i]);
+      if (!ref.coord && !ref.id) continue;
+      const classCell = rows[i].querySelector(".b_snob, td[data-building='snob'], [class*='b_snob']");
+      const cell = classCell || (found && rows[i].cells && rows[i].cells[found.index]);
+      const level = cell ? parseCount(cell.textContent) : 0;
+      if (cell) hits += 1;
+      if (ref.coord) byCoord[ref.coord] = level;
+      if (ref.id) byId[ref.id] = level;
+    }
+    return { byCoord, byId, ok: hits > 0 || Boolean(found) };
+  }
+
+  function parseUnitsHtml(html) {
+    const tableMatch = String(html || "").match(/id=["']units_table["'][\s\S]*?<\/table>/i);
+    const block = tableMatch ? tableMatch[0] : String(html || "");
+    const heads = unitHeadsFromTable(block);
+    if (!heads.length) return { villages: [], ok: false };
+
+    const doc = new DOMParser().parseFromString(
+      tableMatch ? `<table>${tableMatch[0]}</table>` : html,
+      "text/html"
+    );
+    const rows = [...doc.querySelectorAll("tr")];
+    const villages = [];
+    let current = null;
+
+    for (let i = 0; i < rows.length; i += 1) {
+      const row = rows[i];
+      const body = row.innerHTML || "";
+      const text = (row.innerText || row.textContent || "").replace(/\s+/g, " ");
+      const ref = villageRef(row);
+      const label = row.querySelector(".quickedit-label, .quickedit-vn");
+      if (label || (ref.coord && /village=/.test(body))) {
+        if (ref.coord || ref.id) {
+          current = {
+            id: ref.id,
+            coord: ref.coord,
+            axe: 0,
+            light: 0,
+            ram: 0,
+          };
+          villages.push(current);
+        }
+        continue;
+      }
+      if (!current) continue;
+      const isHome = /Na Aldeia|na aldeia|in village|Presentes|presentes/i.test(text + body);
+      if (!isHome) continue;
+
+      const nums = [...body.matchAll(/unit-item[^>]*>(\d+)/gi)].map((m) => Number(m[1]));
+      if (!nums.length && row.cells) {
+        // fallback: células após o rótulo
+        const cells = [...row.cells].slice(1);
+        cells.forEach((cell, idx) => {
+          const u = heads[idx];
+          if (!u) return;
+          const n = parseCount(cell.textContent);
+          if (u === "axe") current.axe = n;
+          if (u === "light") current.light = n;
+          if (u === "ram") current.ram = n;
+        });
+      } else {
+        heads.forEach((u, idx) => {
+          const n = nums[idx] || 0;
+          if (u === "axe") current.axe = n;
+          if (u === "light") current.light = n;
+          if (u === "ram") current.ram = n;
+        });
+      }
+    }
+
+    return { villages, ok: villages.length > 0 };
+  }
+
+  function mergeOwn(buildings, units) {
+    return (units.villages || []).map((v) => {
+      const academy = (v.coord && buildings.byCoord[v.coord] != null)
+        ? buildings.byCoord[v.coord]
+        : (v.id && buildings.byId[v.id] != null ? buildings.byId[v.id] : 0);
+      const pop = offPop(v.axe, v.light, v.ram);
+      return {
+        coord: v.coord,
+        id: v.id,
+        axe: v.axe,
+        light: v.light,
+        ram: v.ram,
+        pop,
+        academy: Number(academy) || 0,
+      };
+    }).filter((v) => v.coord);
+  }
+
+  function pickHits(villages, minPop) {
+    return (villages || [])
+      .filter((v) => (Number(v.academy) || 0) >= 1 && (Number(v.pop) || 0) > minPop)
+      .sort((a, b) => (b.pop || 0) - (a.pop || 0) || String(a.coord).localeCompare(String(b.coord)));
   }
 
   function formatList(title, minPop, hits) {
     const coords = hits.map((v) => v.coord).join(" ");
     const lines = [
       title,
-      "Fonte: Membros → Tropas + Edifícios (academia)",
-      tribeLine(),
-      "Pop ofensiva = B×1 + CL×4 + Ar×5 (só tropas próprias na aldeia)",
+      "Fonte: tuas aldeias — Visão geral → Tropas + Edifícios",
+      "Pop ofensiva = B×1 + CL×4 + Ar×5 (tropas na aldeia)",
       `Filtro: academia ≥ 1 e pop > ${minPop}`,
       `${hits.length} aldeia${hits.length === 1 ? "" : "s"}`,
       "",
@@ -205,36 +206,39 @@
       coords || "(nenhuma)",
       "",
       "Detalhe:",
-    ].filter((line, i, arr) => line || i === arr.length - 1);
-
+    ];
     if (!hits.length) {
       lines.push("Nenhuma aldeia nestes critérios.");
       return lines.join("\n");
     }
-
     hits.forEach((v, i) => {
       const n = String(i + 1).padStart(2, "0");
       lines.push(
-        `${n} - ${v.coord} - (${kOf(v.coord)}) — pop ${v.pop} — B ${v.axe} / CL ${v.light} / Ar ${v.ram} — acad ${v.academy} — ${v.playerName}`
+        `${n} - ${v.coord} - (${kOf(v.coord)}) — pop ${v.pop} — B ${v.axe} / CL ${v.light} / Ar ${v.ram} — acad ${v.academy}`
       );
     });
     return lines.join("\n");
   }
 
-  function formatResult(players) {
-    const anyAcademy = players.some((p) => p.hasAcademyCol);
-    if (!anyAcademy) {
+  function formatResult(buildings, units, villages) {
+    if (!units.ok) {
       return [
-        "Ofensivas com academia — Nômades",
-        tribeLine(),
+        "Ofensivas com academia — tuas aldeias",
         "",
-        "Não encontrei a coluna Academia na aba Edifícios dos membros.",
-        "Confirma permissão de ver Edifícios (e Tropas) dos membros, como no Overwatch.",
-      ].filter(Boolean).join("\n");
+        "Não consegui ler a tabela de tropas (Visão geral → Tropas).",
+        "Abre o jogo na tua conta e tenta de novo.",
+      ].join("\n");
     }
-
-    const over18 = pickHits(players, MIN_OFF_HEAVY);
-    const over9 = pickHits(players, MIN_OFF);
+    if (!buildings.ok) {
+      return [
+        "Ofensivas com academia — tuas aldeias",
+        "",
+        "Não consegui ler a coluna Academia (Visão geral → Edifícios).",
+        "Abre o jogo na tua conta e tenta de novo.",
+      ].join("\n");
+    }
+    const over18 = pickHits(villages, MIN_OFF_HEAVY);
+    const over9 = pickHits(villages, MIN_OFF);
     return [
       formatList(`Lista 1 — academia + ofensiva > ${MIN_OFF_HEAVY}`, MIN_OFF_HEAVY, over18),
       "",
@@ -247,11 +251,9 @@
   function showPanel() {
     const box = $(`
       <div id="nomadesOfensivasBox" class="vis" style="margin:12px 0;padding:10px">
-        <h3>Nômades — Ofensivas com academia</h3>
-        <p>Lê Tropas + Edifícios dos membros da tribo em que estás logado. Lista aldeias com academia e pop ofensiva (B + CL×4 + Ar×5) acima de 9000 e de 18000. Corre uma vez na OND 1 e outra na OND 2.</p>
-        <p>
-          <a href="#" class="btn" id="nomadesBtnOfensivas">Gerar listas</a>
-        </p>
+        <h3>Ofensivas com academia — tuas aldeias</h3>
+        <p>Lê só as <b>tuas</b> aldeias (Visão geral → Tropas e Edifícios). Lista quem tem academia e pop ofensiva (B + CL×4 + Ar×5) acima de 9000 e de 18000.</p>
+        <p><a href="#" class="btn" id="nomadesBtnOfensivas">Gerar listas</a></p>
         <textarea id="nomadesOfensivasText" rows="20" style="width:98%;font:12px/1.4 monospace"></textarea>
         <p><a href="#" class="btn" id="nomadesOfensivasCopy">Copiar texto</a></p>
       </div>`);
@@ -273,35 +275,25 @@
     });
   }
 
-  async function loadPlayers() {
-    UI.InfoMessage("A ler tropas e edifícios dos membros…");
-    const firstTroops = await $.get("/game.php?screen=ally&mode=members_troops");
-    const ids = memberIdsFromHtml(firstTroops);
-    if (!ids.length) {
-      UI.ErrorMessage("Não encontrei membros. Abre o jogo na tribo, com permissão de ver Tropas e Edifícios dos membros.");
-      return null;
+  async function loadOwn() {
+    const sit = sitterQuery();
+    UI.InfoMessage("A ler tuas tropas…");
+    let unitsHtml = await $.get("/game.php?screen=overview_villages&mode=units&type=own&page=-1" + sit);
+    let units = parseUnitsHtml(unitsHtml);
+    if (!units.ok) {
+      unitsHtml = await $.get("/game.php?screen=overview_villages&mode=units&type=there&page=-1" + sit);
+      units = parseUnitsHtml(unitsHtml);
     }
-    const fromPage = $(firstTroops).find("#content_value h2").first().text().split("(")[0].trim();
-    const fromGame = (game_data.player && (game_data.player.ally_tag || game_data.player.ally)) || "";
-    gameTribe = [fromGame, fromPage].map((s) => String(s || "").trim()).filter(Boolean).join(" — ") || fromPage;
+    if (!units.ok) {
+      unitsHtml = await $.get("/game.php?screen=overview_villages&mode=units&page=-1" + sit);
+      units = parseUnitsHtml(unitsHtml);
+    }
 
-    const players = [];
-    for (let i = 0; i < ids.length; i += 1) {
-      UI.InfoMessage("Jogador " + (i + 1) + "/" + ids.length + " (tropas)");
-      const troopsHtml = await $.get(
-        "/game.php?screen=ally&mode=members_troops&player_id=" + encodeURIComponent(ids[i])
-      );
-      await wait(PAUSE);
-      UI.InfoMessage("Jogador " + (i + 1) + "/" + ids.length + " (edifícios)");
-      const buildingsHtml = await $.get(
-        "/game.php?screen=ally&mode=members_buildings&player_id=" + encodeURIComponent(ids[i])
-      );
-      const troops = parseTroops(troopsHtml);
-      const buildings = parseBuildings(buildingsHtml);
-      players.push(mergePlayer(troops, buildings));
-      if (i < ids.length - 1) await wait(PAUSE);
-    }
-    return players;
+    UI.InfoMessage("A ler teus edifícios…");
+    const buildingsHtml = await $.get("/game.php?screen=overview_villages&mode=buildings&page=-1" + sit);
+    const buildings = parseBuildingsHtml(buildingsHtml);
+    const villages = mergeOwn(buildings, units);
+    return { buildings, units, villages };
   }
 
   async function withBusy(fn) {
@@ -313,7 +305,7 @@
     try {
       await fn();
     } catch (err) {
-      UI.ErrorMessage("Não consegui ler Tropas/Edifícios dos membros. Confirma permissões na tribo.");
+      UI.ErrorMessage("Não consegui ler tuas aldeias. Confirma que estás logado no jogo.");
     } finally {
       busy = false;
     }
@@ -321,10 +313,9 @@
 
   async function runOfensivas() {
     await withBusy(async () => {
-      const players = await loadPlayers();
-      if (!players) return;
-      $("#nomadesOfensivasText").val(formatResult(players));
-      UI.SuccessMessage("Listas de ofensivas prontas para copiar.");
+      const { buildings, units, villages } = await loadOwn();
+      $("#nomadesOfensivasText").val(formatResult(buildings, units, villages));
+      UI.SuccessMessage("Listas prontas para copiar.");
     });
   }
 
