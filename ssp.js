@@ -1,9 +1,18 @@
+// ==UserScript==
+// @name         Tribal Wars — SSP (Single Screen Planner & Precision Snipe)
+// @version      3.2
+// @description  Planejador de ataques e snipes em tela única com cronômetro de precisão e disparo automático
+// @author       Azuelos
+// @match        https://*.tribalwars.com.br/game.php*
+// @grant        none
+// ==/UserScript==
+
 /**
  * Single Screen Planner (SSP) — Planejador de Ataques e Snipes com Cronômetro e Disparo de Precisão
  * Tribal Wars BR / Internacional
  *
  * Repositório: https://github.com/Azuelos/tw-toolkit
- * Versão: 3.1 (Manual com Cronômetro Visual/Sonoro + Disparo Automático Opcional com Alta Precisão)
+ * Versão: 3.2 (Envio Direto para Confirmação + Cronômetro HUD + Disparo Automático)
  */
 
 var isMobile = (typeof mobile !== 'undefined' && Boolean(mobile)) || (typeof game_data !== 'undefined' && game_data.device === 'mobile');
@@ -74,6 +83,209 @@ function salvarComandoSSP(villageId, targetCoord, launchTimestamp, paramsUrl) {
 }
 
 // -------------------------------------------------------------
+// ENVIO DIRETO PARA A TELA DE CONFIRMAÇÃO (1 CLIQUE)
+// -------------------------------------------------------------
+function enviarDiretoConfirmacao(villageId, targetCoord, launchTimestamp, paramsUrl) {
+  var tipoComando = ($("#tipoComandoSSP").val()) || "support";
+  var tipoNome = (tipoComando === "attack") ? "ataque" : "apoio";
+
+  if (typeof UI !== 'undefined' && UI.InfoMessage) {
+    UI.InfoMessage("Preparando " + tipoNome + " e abrindo tela de confirmação...", 2000, "info");
+  }
+
+  // 1. Salva o comando no sessionStorage e localStorage
+  salvarComandoSSP(villageId, targetCoord, launchTimestamp, paramsUrl);
+
+  // 2. Busca a Praça de Reunião da aldeia de origem em segundo plano
+  var placeUrl = "/game.php?village=" + villageId + "&screen=place";
+
+  var xhr = new XMLHttpRequest();
+  xhr.open("GET", placeUrl, true);
+  xhr.onreadystatechange = function() {
+    if (xhr.readyState === 4) {
+      if (xhr.status === 200) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(xhr.responseText, "text/html");
+
+        var formOrig = doc.querySelector("#command-data-form") || doc.querySelector("form[action*='try=confirm']");
+        if (!formOrig) {
+          // Fallback caso a aldeia não tenha praça ou formato seja diferente
+          window.location.href = placeUrl + "&x=" + targetCoord.split('|')[0] + "&y=" + targetCoord.split('|')[1] + paramsUrl;
+          return;
+        }
+
+        var actionUrl = formOrig.getAttribute("action") || (placeUrl + "&try=confirm");
+        if (actionUrl.indexOf("/") !== 0 && actionUrl.indexOf("http") !== 0) {
+          actionUrl = "/" + actionUrl;
+        }
+        actionUrl = actionUrl.replace(/&amp;/g, '&');
+
+        // Cria os parâmetros em formato URL-encoded idêntico ao formulário nativo do TW
+        var postParams = new URLSearchParams();
+
+        // Copia todos os inputs hidden originais (ch, csrf tokens, etc.)
+        $(formOrig).find("input[type='hidden']").each(function() {
+          var hName = $(this).attr("name");
+          var hVal = $(this).val();
+          if (hName && hName !== "x" && hName !== "y" && hName !== "target_type" && hName !== "attack" && hName !== "support") {
+            postParams.append(hName, hVal);
+          }
+        });
+
+        postParams.append("target_type", "coord");
+        var parts = targetCoord.split('|');
+        postParams.append("x", parts[0]);
+        postParams.append("y", parts[1]);
+
+        // Preenche as tropas a partir de paramsUrl
+        var pairs = decodeURIComponent(paramsUrl).split('&');
+        var troopsMap = {};
+        pairs.forEach(function(pair) {
+          if (pair.indexOf("att_") === 0) {
+            var unitData = pair.replace("att_", "").split('=');
+            if (unitData.length === 2 && Number(unitData[1]) > 0) {
+              troopsMap[unitData[0]] = unitData[1];
+              postParams.append(unitData[0], unitData[1]);
+            }
+          }
+        });
+
+        // Garante que todas as unidades do jogo presentes no formulário original sejam declaradas
+        $(formOrig).find("input.unitsInput, input[name='spear'], input[name='sword'], input[name='axe'], input[name='archer'], input[name='spy'], input[name='light'], input[name='marcher'], input[name='heavy'], input[name='ram'], input[name='catapult'], input[name='knight'], input[name='snob']").each(function() {
+          var uName = $(this).attr("name");
+          if (uName && !postParams.has(uName)) {
+            postParams.append(uName, "");
+          }
+        });
+
+        // Adiciona a ação "Apoiar" ou "Atacar"
+        if (tipoComando === "attack") {
+          postParams.append("attack", "Atacar");
+        } else {
+          postParams.append("support", "Apoiar");
+        }
+
+        // Tenta envio via AJAX para transição instantânea sem descarregar a página
+        var postXhr = new XMLHttpRequest();
+        postXhr.open("POST", actionUrl, true);
+        postXhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+        postXhr.onreadystatechange = function() {
+          if (postXhr.readyState === 4) {
+            if (postXhr.status === 200 && postXhr.responseText.indexOf("troop_confirm_submit") !== -1) {
+              // Transição instantânea com sucesso!
+              var confirmDoc = parser.parseFromString(postXhr.responseText, "text/html");
+              var newContent = confirmDoc.querySelector("#content_value");
+
+              if (newContent) {
+                try {
+                  history.pushState(null, "", actionUrl);
+                } catch (e) {}
+
+                // Remove o planejador SSP
+                $("#planer_klinow").remove();
+
+                // Atualiza o conteúdo central com a tela de confirmação oficial do Tribal Wars
+                var mainContent = document.getElementById("content_value");
+                if (mainContent) {
+                  mainContent.innerHTML = newContent.innerHTML;
+                } else {
+                  $("#contentContainer").html(newContent.innerHTML);
+                }
+
+                // Renderiza o HUD de precisão imediatamente com o alvo já setado!
+                desenharSnipeHUD(launchTimestamp);
+
+                if (typeof UI !== 'undefined' && UI.InfoMessage) {
+                  UI.InfoMessage("Tela de confirmação pronta! Cronômetro ativo.", 2000, "success");
+                }
+                return;
+              }
+            }
+
+            // Se o AJAX retornou erro específico do TW, exibe para o jogador
+            if (postXhr.status === 200 && postXhr.responseText.indexOf("error_box") !== -1) {
+              var errDoc = parser.parseFromString(postXhr.responseText, "text/html");
+              var errBox = errDoc.querySelector(".error_box");
+              if (errBox) {
+                var msg = $(errBox).text().trim();
+                if (typeof UI !== 'undefined' && UI.InfoMessage) {
+                  UI.InfoMessage("Erro do servidor: " + msg, 4000, "error");
+                }
+                return;
+              }
+            }
+
+            // Fallback: se o AJAX não retornou o botão troop_confirm_submit, submete nativamente pelo navegador
+            submeterFormularioNativo(actionUrl, formOrig, targetCoord, paramsUrl, tipoComando);
+          }
+        };
+        postXhr.send(postParams.toString());
+
+      } else {
+        window.location.href = placeUrl + "&x=" + targetCoord.split('|')[0] + "&y=" + targetCoord.split('|')[1] + paramsUrl;
+      }
+    }
+  };
+  xhr.send(null);
+}
+
+function submeterFormularioNativo(actionUrl, formOrig, targetCoord, paramsUrl, tipoComando) {
+  var form = document.createElement("form");
+  form.method = "POST";
+  form.action = actionUrl;
+  form.style.display = "none";
+
+  function addInput(name, val) {
+    var input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = val;
+    form.appendChild(input);
+  }
+
+  $(formOrig).find("input[type='hidden']").each(function() {
+    var hName = $(this).attr("name");
+    var hVal = $(this).val();
+    if (hName && hName !== "x" && hName !== "y" && hName !== "target_type" && hName !== "attack" && hName !== "support") {
+      addInput(hName, hVal);
+    }
+  });
+
+  addInput("target_type", "coord");
+  var parts = targetCoord.split('|');
+  addInput("x", parts[0]);
+  addInput("y", parts[1]);
+
+  var pairs = decodeURIComponent(paramsUrl).split('&');
+  var troopsAdded = {};
+  pairs.forEach(function(pair) {
+    if (pair.indexOf("att_") === 0) {
+      var unitData = pair.replace("att_", "").split('=');
+      if (unitData.length === 2 && Number(unitData[1]) > 0) {
+        troopsAdded[unitData[0]] = true;
+        addInput(unitData[0], unitData[1]);
+      }
+    }
+  });
+
+  $(formOrig).find("input.unitsInput, input[name='spear'], input[name='sword'], input[name='axe'], input[name='archer'], input[name='spy'], input[name='light'], input[name='marcher'], input[name='heavy'], input[name='ram'], input[name='catapult'], input[name='knight'], input[name='snob']").each(function() {
+    var uName = $(this).attr("name");
+    if (uName && !troopsAdded[uName]) {
+      addInput(uName, "");
+    }
+  });
+
+  if (tipoComando === "attack") {
+    addInput("attack", "Atacar");
+  } else {
+    addInput("support", "Apoiar");
+  }
+
+  document.body.appendChild(form);
+  form.submit();
+}
+
+// -------------------------------------------------------------
 // ASSISTENTE DE CONFIRMAÇÃO (SNIPE HUD + DISPARO AUTOMÁTICO)
 // -------------------------------------------------------------
 function obterTempoServidorMs() {
@@ -119,7 +331,7 @@ function desenharSnipeHUD(targetTimestamp) {
   var hudHtml = "" +
     "<div id='ssp_snipe_hud' style='margin: 15px auto; max-width: 650px; background: #222a1f; color: #fff; border: 3px solid #7d510f; border-radius: 8px; padding: 12px 18px; box-shadow: 0 4px 15px rgba(0,0,0,0.6); font-family: Verdana, sans-serif; text-align: center; transition: border-color 0.3s;'>" +
     "  <div style='display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.15); padding-bottom: 6px; margin-bottom: 10px;'>" +
-    "    <span style='font-size: 13px; font-weight: bold; color: #ffcc00;'>🎯 SSP — Cronômetro & Disparo de Precisão</span>" +
+    "    <span style='font-size: 13px; font-weight: bold; color: #ffcc00;'>🎯 SSP — Cronômetro de Precisão (Snipe / Apoio)</span>" +
     "    <div>" +
     "      <button id='ssp_toggle_audio' type='button' style='font-size: 11px; background: #3c4a2c; color: #fff; border: 1px solid #7d510f; padding: 2px 8px; border-radius: 4px; cursor: pointer; margin-right: 6px;'>🔊 Áudio: ON</button>" +
     "      <button id='ssp_close_hud' type='button' style='font-size: 11px; background: #661111; color: #fff; border: 1px solid #990000; padding: 2px 6px; border-radius: 4px; cursor: pointer;'>✖</button>" +
@@ -136,9 +348,9 @@ function desenharSnipeHUD(targetTimestamp) {
     "    </div>" +
     "  </div>" +
     "  <div style='background: #111; border: 2px solid #444; border-radius: 6px; padding: 12px; margin-bottom: 10px;'>" +
-    "    <div style='font-size: 12px; color: #ccc; margin-bottom: 4px;'>CONTAGEM REGRESSIVA:</div>" +
+    "    <div style='font-size: 12px; color: #ccc; margin-bottom: 4px;'>CONTAGEM REGRESSIVA PARA O CLIQUE:</div>" +
     "    <div id='ssp_countdown_display' style='font-size: 34px; font-weight: bold; font-family: monospace; letter-spacing: 2px; color: #ffffff;'>00:00.000</div>" +
-    "    <div id='ssp_status_badge' style='margin-top: 6px; font-size: 13px; font-weight: bold; padding: 4px 10px; border-radius: 4px; display: inline-block; background: #333; color: #aaa;'>Aguardando...</div>" +
+    "    <div id='ssp_status_badge' style='margin-top: 6px; font-size: 13px; font-weight: bold; padding: 4px 10px; border-radius: 4px; display: inline-block; background: #333; color: #aaa;'>Aguardando momento ideal...</div>" +
     "  </div>" +
     "  <div style='background: rgba(255,255,255,0.06); padding: 8px 12px; border-radius: 6px; margin-bottom: 10px; font-size: 12px; display: flex; justify-content: center; align-items: center; gap: 15px; flex-wrap: wrap;'>" +
     "    <label style='display: flex; align-items: center; gap: 6px; cursor: pointer; font-weight: bold; color: #ffaa33;'>" +
@@ -150,8 +362,9 @@ function desenharSnipeHUD(targetTimestamp) {
     "    </label>" +
     "  </div>" +
     "  <div style='font-size: 11px; color: #bbb; line-height: 1.4;'>" +
-    "    💡 <strong>Modo Manual:</strong> Aperte o botão quando a barra acender em <span style='color:#00ff00; font-weight:bold;'>VERDE</span> ou no bip final.<br>" +
-    "    ⚡ <strong>Modo Automático:</strong> Marque a caixa acima e mantenha esta aba <strong>aberta e visível</strong> para disparo de precisão milimétrica!" +
+    "    💡 <strong>Dica de Tolerância (±75ms):</strong> Nos últimos 3s soam bips sonoros. Quando o cronômetro zerar e a barra ficar <span style='color:#00ff00; font-weight:bold;'>VERDE</span>, aperte o botão de envio!<br>" +
+    "    ⚡ <strong>Modo Automático:</strong> Marque a caixa de disparo automático para envio no ms exato. Mantenha a aba aberta e visível.<br>" +
+    "    <span style='color: #88cc88;'>O clique humano é 100% seguro contra detecção e mantém a sua conta protegida.</span>" +
     "  </div>" +
     "</div>";
 
@@ -224,10 +437,9 @@ function desenharSnipeHUD(targetTimestamp) {
         dispararComando();
         return;
       } else if (remaining <= 15) {
-        // Spin-lock de ultra-alta precisão nos últimos 15ms para zerar jitter de macro-task do navegador
         var startSpin = performance.now();
         while ((obterTempoServidorMs() < triggerAt) && (performance.now() - startSpin < 30)) {
-          // spin
+          // micro spin-lock
         }
         dispararComando();
         return;
@@ -269,7 +481,6 @@ function desenharSnipeHUD(targetTimestamp) {
         else if (totalSec === 1) tocarBeep(850, 90);
       }
 
-      // Estados Visuais e acionamento do microLoop
       if (diffMs <= 1500 && !rafId) {
         rafId = requestAnimationFrame(microLoopPrecision);
       }
@@ -315,7 +526,7 @@ function desenharSnipeHUD(targetTimestamp) {
 }
 
 // -------------------------------------------------------------
-// VERIFICAÇÃO AUTOMÁTICA DE TELAS AO CLICAR NO QUICKBAR
+// VERIFICAÇÃO AUTOMÁTICA DE TELAS AO CLICAR NO QUICKBAR OU USERSCRIPT
 // -------------------------------------------------------------
 function verificarTelaAtual() {
   var isConfirmScreen = location.href.indexOf("try=confirm") !== -1 || $("#troop_confirm_submit").length > 0;
@@ -338,7 +549,7 @@ function verificarTelaAtual() {
     return true;
   }
 
-  // 2. Se estiver na Praça de Reunião (1ª tela de envio):
+  // 2. Se estiver na Praça de Reunião:
   if (isPlaceScreen) {
     try {
       var raw = sessionStorage.getItem("ssp_pending_cmd");
@@ -357,15 +568,10 @@ function verificarTelaAtual() {
             if (pair.indexOf("att_") === 0) {
               var unitData = pair.replace("att_", "").split('=');
               if (unitData.length === 2) {
-                var unitName = unitData[0];
-                var unitCount = unitData[1];
-                $('input[name="' + unitName + '"]').val(unitCount);
+                $('input[name="' + unitData[0] + '"]').val(unitData[1]);
               }
             }
           });
-        }
-        if (typeof UI !== 'undefined' && UI.InfoMessage) {
-          UI.InfoMessage("🎯 SSP: Tropas e coordenadas preenchidas! Clique em Apoiar ou Ataque para ir ao cronômetro.", 2500, "success");
         }
       }
     } catch (e) {}
@@ -586,7 +792,8 @@ function escolherOpcoes() {
       var linkHref = info.linkComando + id[i] + "&screen=place&x=" + _0x56acf5[0] + "&y=" + _0x56acf5[1] + tropa_possiveis;
       var targetCoordStr = _0x56acf5[0] + "|" + _0x56acf5[1];
 
-      _0x59487e[_0x42d393] = _0x335285[i] + "<td>" + ddd + "</td><td>0</td><td><a class='btn btn-ssp-enviar' href='" + linkHref + "' onclick=\"salvarComandoSSP('" + id[i] + "', '" + targetCoordStr + "', " + launchTs + ", '" + encodeURIComponent(tropa_possiveis) + "');\">Enviar</a></td></tr>";
+      // O botão "Enviar" agora submete via POST direto para try=confirm
+      _0x59487e[_0x42d393] = _0x335285[i] + "<td>" + ddd + "</td><td>0</td><td><a class='btn btn-ssp-enviar' href='#' onclick=\"enviarDiretoConfirmacao('" + id[i] + "', '" + targetCoordStr + "', " + launchTs + ", '" + encodeURIComponent(tropa_possiveis) + "'); return false;\">Enviar</a></td></tr>";
       tabelaBB[_0x42d393] = "[*]" + info.nomesTropas[_0x5b1439] + "[|] " + ax + "|" + ay + " [|] " + _0x56acf5[0] + "|" + _0x56acf5[1] + " [|] " + ddd + " [|] [url=https://" + document.URL.split('/')[2] + linkHref + "]Enviar\n";
       _0x42d393++;
     } else {
@@ -870,12 +1077,13 @@ function desenharPlanner(tempoAtual) {
   var html = "<div class='vis vis_item' align='center' style='overflow: auto; height: 450px;' id='planer_klinow'>" +
     "<table width='100%'><tr><td width='300'>" +
     "<table style='border-spacing: 3px; border-collapse: separate;'>" +
-    "<tr><th>Alvo</th><th>Data</th><th>Hora</th><th>Grupo</th><th></th><th></th><th>Autor</th></tr>" +
+    "<tr><th>Alvo</th><th>Data</th><th>Hora</th><th>Grupo</th><th>Tipo</th><th></th><th></th><th>Autor</th></tr>" +
     "<tr>" +
     "<td><input size=8 type='text' onchange='mostrarDistancia();' value='" + coordAtual + "' id='objetivoCommun' /></td>" +
     "<td><input size=8 type='text' value='" + formatarDatas(tempoAtual) + "' onchange=\"dataCorreta(this,'.');\" id='data_input'/></td>" +
     "<td><input size=8 type='text' value='" + formatarHoras(tempoAtual) + "' onchange=\"dataCorreta(this,':');\" id='hora_input'/></td>" +
     "<td><select id='listGrup' onchange='mudarGrupo();'><option value='" + todasTropas + "'>Todos</option></select></td>" +
+    "<td><select id='tipoComandoSSP' style='padding: 2px 4px;'><option value='support' selected>Apoiar</option><option value='attack'>Atacar</option></select></td>" +
     "<td onclick=\"mudarSeta(); if($('#escolher_tropas').is(':visible')){ $('#escolher_tropas').hide();$('#lista_tropas').show(); guardarSelecao(); return;} else { $('#lista_tropas').hide(); $('#escolher_tropas').show(); }\" style='cursor:pointer;'><span id='icone_seta' class='icon header arr_down'></span></td>" +
     "<td><input type='button' class='btn' value='CALCULAR' onclick='escolherOpcoes();' id='przycisk'></td>" +
     "<td><b>Azuelos</b> (SSP)</td>" +
@@ -1049,6 +1257,8 @@ window.verificarTudo = verificarTudo;
 window.iniciarSSP = iniciarSSP;
 window.salvarComandoSSP = salvarComandoSSP;
 window.desenharSnipeHUD = desenharSnipeHUD;
+window.enviarDiretoConfirmacao = enviarDiretoConfirmacao;
+window.submeterFormularioNativo = submeterFormularioNativo;
 
 // Inicia automaticamente
 iniciarSSP();
