@@ -1086,7 +1086,7 @@ function desenharPlanner(tempoAtual) {
     "<td><select id='tipoComandoSSP' style='padding: 2px 4px;'><option value='support' selected>Apoiar</option><option value='attack'>Atacar</option></select></td>" +
     "<td onclick=\"mudarSeta(); if($('#escolher_tropas').is(':visible')){ $('#escolher_tropas').hide();$('#lista_tropas').show(); guardarSelecao(); return;} else { $('#lista_tropas').hide(); $('#escolher_tropas').show(); }\" style='cursor:pointer;'><span id='icone_seta' class='icon header arr_down'></span></td>" +
     "<td><input type='button' class='btn' value='CALCULAR' onclick='escolherOpcoes();' id='przycisk'></td>" +
-    "<td><b>Azuelos</b> (SSP)</td>" +
+    "<td><a href='https://www.instagram.com/jhonatanazuelosoficial?stkn=NWZ3ZTVoMnE1NGwx&utm_source=qr' target='_blank' rel='noopener noreferrer' style='font-weight: bold; text-decoration: underline;'>Azuelos</a> (SSP)</td>" +
     "<td style='display:none;'><input size='8' type='text' onchange='mostrarDistancia();' value='0' id='sigilias'></td>" +
     "</tr>" +
     "</table>" +
