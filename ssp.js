@@ -1,9 +1,9 @@
 /**
- * Single Screen Planner (SSP) — Planejador de Ataques e Snipes com Cronômetro de Precisão
+ * Single Screen Planner (SSP) — Planejador de Ataques e Snipes com Cronômetro e Disparo de Precisão
  * Tribal Wars BR / Internacional
  *
  * Repositório: https://github.com/Azuelos/tw-toolkit
- * Versão: 3.0 (SSP + Assistente de Precisão / Snipe HUD na Confirmação)
+ * Versão: 3.1 (Manual com Cronômetro Visual/Sonoro + Disparo Automático Opcional com Alta Precisão)
  */
 
 var isMobile = (typeof mobile !== 'undefined' && Boolean(mobile)) || (typeof game_data !== 'undefined' && game_data.device === 'mobile');
@@ -74,7 +74,7 @@ function salvarComandoSSP(villageId, targetCoord, launchTimestamp, paramsUrl) {
 }
 
 // -------------------------------------------------------------
-// ASSISTENTE DE CONFIRMAÇÃO (SNIPE HUD COM MILISSEGUNDOS)
+// ASSISTENTE DE CONFIRMAÇÃO (SNIPE HUD + DISPARO AUTOMÁTICO)
 // -------------------------------------------------------------
 function obterTempoServidorMs() {
   if (typeof Timing !== 'undefined' && Timing.getCurrentServerTime) {
@@ -108,18 +108,18 @@ function desenharSnipeHUD(targetTimestamp) {
 
   var btnSubmit = $("#troop_confirm_submit");
   if (!btnSubmit.length) {
-    btnSubmit = $('input[type="submit"].btn-attack, input[type="submit"].btn');
+    btnSubmit = $('input[type="submit"].btn-attack, input[type="submit"].btn, #command-data-form input[type="submit"]');
   }
 
-  // Foco no botão de envio para facilitar clique humano por teclado/mouse
+  // Foco no botão de envio
   if (btnSubmit.length) {
     btnSubmit.focus();
   }
 
   var hudHtml = "" +
-    "<div id='ssp_snipe_hud' style='margin: 15px auto; max-width: 650px; background: #222a1f; color: #fff; border: 3px solid #7d510f; border-radius: 8px; padding: 12px 18px; box-shadow: 0 4px 15px rgba(0,0,0,0.6); font-family: Verdana, sans-serif; text-align: center;'>" +
+    "<div id='ssp_snipe_hud' style='margin: 15px auto; max-width: 650px; background: #222a1f; color: #fff; border: 3px solid #7d510f; border-radius: 8px; padding: 12px 18px; box-shadow: 0 4px 15px rgba(0,0,0,0.6); font-family: Verdana, sans-serif; text-align: center; transition: border-color 0.3s;'>" +
     "  <div style='display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.15); padding-bottom: 6px; margin-bottom: 10px;'>" +
-    "    <span style='font-size: 13px; font-weight: bold; color: #ffcc00;'>🎯 SSP — Cronômetro de Precisão (Snipe / Apoio)</span>" +
+    "    <span style='font-size: 13px; font-weight: bold; color: #ffcc00;'>🎯 SSP — Cronômetro & Disparo de Precisão</span>" +
     "    <div>" +
     "      <button id='ssp_toggle_audio' type='button' style='font-size: 11px; background: #3c4a2c; color: #fff; border: 1px solid #7d510f; padding: 2px 8px; border-radius: 4px; cursor: pointer; margin-right: 6px;'>🔊 Áudio: ON</button>" +
     "      <button id='ssp_close_hud' type='button' style='font-size: 11px; background: #661111; color: #fff; border: 1px solid #990000; padding: 2px 6px; border-radius: 4px; cursor: pointer;'>✖</button>" +
@@ -136,13 +136,22 @@ function desenharSnipeHUD(targetTimestamp) {
     "    </div>" +
     "  </div>" +
     "  <div style='background: #111; border: 2px solid #444; border-radius: 6px; padding: 12px; margin-bottom: 10px;'>" +
-    "    <div style='font-size: 12px; color: #ccc; margin-bottom: 4px;'>CONTAGEM REGRESSIVA PARA O CLIQUE:</div>" +
+    "    <div style='font-size: 12px; color: #ccc; margin-bottom: 4px;'>CONTAGEM REGRESSIVA:</div>" +
     "    <div id='ssp_countdown_display' style='font-size: 34px; font-weight: bold; font-family: monospace; letter-spacing: 2px; color: #ffffff;'>00:00.000</div>" +
     "    <div id='ssp_status_badge' style='margin-top: 6px; font-size: 13px; font-weight: bold; padding: 4px 10px; border-radius: 4px; display: inline-block; background: #333; color: #aaa;'>Aguardando...</div>" +
     "  </div>" +
+    "  <div style='background: rgba(255,255,255,0.06); padding: 8px 12px; border-radius: 6px; margin-bottom: 10px; font-size: 12px; display: flex; justify-content: center; align-items: center; gap: 15px; flex-wrap: wrap;'>" +
+    "    <label style='display: flex; align-items: center; gap: 6px; cursor: pointer; font-weight: bold; color: #ffaa33;'>" +
+    "      <input type='checkbox' id='ssp_auto_fire' style='width: 16px; height: 16px; cursor: pointer;'> ⚡ Ativar Disparo Automático" +
+    "    </label>" +
+    "    <span style='color: #888;'>|</span>" +
+    "    <label style='display: flex; align-items: center; gap: 4px; color: #ccc;'>" +
+    "      Compensação/Ping: <input type='number' id='ssp_offset_ms' value='0' step='5' style='width: 55px; text-align: center; background: #222; color: #fff; border: 1px solid #666; border-radius: 3px; padding: 2px;'> ms" +
+    "    </label>" +
+    "  </div>" +
     "  <div style='font-size: 11px; color: #bbb; line-height: 1.4;'>" +
-    "    💡 <strong>Dica de Tolerância (±75ms):</strong> Nos últimos 3s soam bips sonoros. Quando o cronômetro zerar e a barra ficar <span style='color:#00ff00; font-weight:bold;'>VERDE</span>, aperte o botão de envio!<br>" +
-    "    <span style='color: #ffaa55;'>O clique humano é 100% seguro contra detecção e mantém a sua conta protegida.</span>" +
+    "    💡 <strong>Modo Manual:</strong> Aperte o botão quando a barra acender em <span style='color:#00ff00; font-weight:bold;'>VERDE</span> ou no bip final.<br>" +
+    "    ⚡ <strong>Modo Automático:</strong> Marque a caixa acima e mantenha esta aba <strong>aberta e visível</strong> para disparo de precisão milimétrica!" +
     "  </div>" +
     "</div>";
 
@@ -162,16 +171,82 @@ function desenharSnipeHUD(targetTimestamp) {
     $(this).text(audioHabilitado ? "🔊 Áudio: ON" : "🔇 Áudio: OFF");
   });
 
+  var autoFireArmed = false;
+  var disparado = false;
+  var rafId = null;
+
+  $("#ssp_auto_fire").on("change", function() {
+    autoFireArmed = $(this).is(":checked");
+    if (autoFireArmed) {
+      $("#ssp_snipe_hud").css("border-color", "#ffaa00");
+      $("#ssp_status_badge").css({ background: "#aa5500", color: "#ffffff" }).text("⚡ DISPARO AUTOMÁTICO ARMADO");
+    } else {
+      $("#ssp_snipe_hud").css("border-color", "#7d510f");
+      $("#ssp_status_badge").css({ background: "#333333", color: "#aaaaaa" }).text("Modo Manual Selecionado");
+    }
+  });
+
   var targetMs = targetTimestamp || Date.now() + 60000;
   $("#ssp_target_clock").text(formatarHoraCompletaMs(targetMs));
 
   var lastBeepSec = -1;
 
+  function dispararComando() {
+    if (disparado) return;
+    disparado = true;
+    if (snipeInterval) clearInterval(snipeInterval);
+    if (rafId) cancelAnimationFrame(rafId);
+
+    tocarBeep(1200, 160);
+    $("#ssp_countdown_display").css("color", "#00ff00").text("00:00.000");
+    $("#ssp_status_badge").css({ background: "#00aa00", color: "#ffffff" }).text("🚀 DISPARO ENVIADO NO MILISSEGUNDO EXATO!");
+
+    if (btnSubmit.length) {
+      btnSubmit.css({ "box-shadow": "0 0 25px #00ff00", "outline": "4px solid #00ff00" });
+      try {
+        btnSubmit[0].click();
+      } catch (e) {
+        btnSubmit.trigger("click");
+      }
+    }
+  }
+
+  // Loop de micro-precisão acionado nos últimos 1500ms
+  function microLoopPrecision() {
+    if (disparado) return;
+    var nowMs = obterTempoServidorMs();
+    var offsetMs = Number($("#ssp_offset_ms").val()) || 0;
+    var triggerAt = targetMs - offsetMs;
+    var remaining = triggerAt - nowMs;
+
+    if (autoFireArmed) {
+      if (remaining <= 0) {
+        dispararComando();
+        return;
+      } else if (remaining <= 15) {
+        // Spin-lock de ultra-alta precisão nos últimos 15ms para zerar jitter de macro-task do navegador
+        var startSpin = performance.now();
+        while ((obterTempoServidorMs() < triggerAt) && (performance.now() - startSpin < 30)) {
+          // spin
+        }
+        dispararComando();
+        return;
+      }
+    }
+
+    if (remaining < 1500 && !disparado) {
+      rafId = requestAnimationFrame(microLoopPrecision);
+    }
+  }
+
   snipeInterval = setInterval(function() {
+    if (disparado) return;
     var nowMs = obterTempoServidorMs();
     $("#ssp_server_clock").text(formatarHoraCompletaMs(nowMs));
 
-    var diffMs = targetMs - nowMs;
+    var offsetMs = Number($("#ssp_offset_ms").val()) || 0;
+    var triggerAt = targetMs - offsetMs;
+    var diffMs = triggerAt - nowMs;
     var displayEl = $("#ssp_countdown_display");
     var badgeEl = $("#ssp_status_badge");
 
@@ -186,7 +261,7 @@ function desenharSnipeHUD(targetTimestamp) {
 
       displayEl.text(strMin + ':' + strSec + '.' + strMs);
 
-      // Bips sonoros sincronizados nos últimos 3 segundos
+      // Bips de áudio nos últimos 3 segundos
       if (totalSec <= 3 && totalSec !== lastBeepSec) {
         lastBeepSec = totalSec;
         if (totalSec === 3) tocarBeep(650, 70);
@@ -194,42 +269,49 @@ function desenharSnipeHUD(targetTimestamp) {
         else if (totalSec === 1) tocarBeep(850, 90);
       }
 
-      // Estados Visuais
-      if (diffMs <= 200) {
+      // Estados Visuais e acionamento do microLoop
+      if (diffMs <= 1500 && !rafId) {
+        rafId = requestAnimationFrame(microLoopPrecision);
+      }
+
+      if (diffMs <= 250) {
         displayEl.css("color", "#00ff00");
-        badgeEl.css({ background: "#008800", color: "#ffffff" }).text("🔥 CLIQUE AGORA! 🔥");
+        badgeEl.css({ background: "#008800", color: "#ffffff" }).text(autoFireArmed ? "⚡ DISPARANDO NO MS EXATO..." : "🔥 CLIQUE AGORA! 🔥");
         if (btnSubmit.length) {
           btnSubmit.css({ "box-shadow": "0 0 15px #00ff00", "outline": "3px solid #00ff00" });
         }
       } else if (diffMs <= 2000) {
         displayEl.css("color", "#ffaa00");
-        badgeEl.css({ background: "#aa5500", color: "#ffffff" }).text("⚠️ ATENÇÃO MÁXIMA — Prepare o dedo!");
+        badgeEl.css({ background: "#aa5500", color: "#ffffff" }).text("⚠️ ATENÇÃO MÁXIMA — Prepare o comando!");
       } else if (diffMs <= 5000) {
         displayEl.css("color", "#ffee55");
         badgeEl.css({ background: "#665500", color: "#ffffff" }).text("🔔 PREPARE-SE...");
-      } else {
+      } else if (!autoFireArmed) {
         displayEl.css("color", "#ffffff");
         badgeEl.css({ background: "#333333", color: "#aaaaaa" }).text("Aguardando momento ideal...");
       }
     } else {
-      // Passou do momento
+      if (autoFireArmed && !disparado) {
+        dispararComando();
+        return;
+      }
       var passMs = Math.abs(diffMs);
       if (passMs <= 75) {
         displayEl.css("color", "#00ff00").text("00:00.000");
-        badgeEl.css({ background: "#00aa00", color: "#fff" }).text("🎯 JANELA EXATA DE 75ms!");
+        badgeEl.css({ background: "#00aa00", color: "#fff" }).text("🎯 JANELA DE ±75ms ATINGIDA!");
         if (lastBeepSec !== 0) {
           tocarBeep(1100, 140);
           lastBeepSec = 0;
         }
       } else {
         displayEl.css("color", "#ff4444").text("+" + (passMs / 1000).toFixed(3) + "s");
-        badgeEl.css({ background: "#660000", color: "#fff" }).text("Comando expirado (" + passMs + "ms atrás)");
+        badgeEl.css({ background: "#660000", color: "#fff" }).text("Momento expirado (" + passMs + "ms atrás)");
         if (btnSubmit.length) {
           btnSubmit.css({ "box-shadow": "none", "outline": "none" });
         }
       }
     }
-  }, 25); // Atualização fluida a 40fps para precisão de milissegundos
+  }, 25);
 }
 
 // -------------------------------------------------------------
@@ -247,7 +329,7 @@ function verificarTelaAtual() {
       if (raw) pendingCmd = JSON.parse(raw);
     } catch (e) {}
 
-    var targetMs = Date.now() + 30000; // default 30s se não houver comando pré-salvo
+    var targetMs = Date.now() + 30000;
     if (pendingCmd && pendingCmd.launchTimestamp) {
       targetMs = pendingCmd.launchTimestamp;
     }
@@ -269,7 +351,6 @@ function verificarTelaAtual() {
             $('input[name="y"]').val(parts[1]);
           }
         }
-        // Preenche tropas passadas na URL ou params
         if (cmd.paramsUrl) {
           var pairs = decodeURIComponent(cmd.paramsUrl).split('&');
           pairs.forEach(function(pair) {
@@ -297,7 +378,6 @@ function verificarTelaAtual() {
 // NÚCLEO DO SINGLE SCREEN PLANNER (SSP)
 // -------------------------------------------------------------
 function iniciarSSP() {
-  // Se for tela de confirmação, abre o HUD de precisão diretamente
   if (verificarTelaAtual()) {
     return;
   }
