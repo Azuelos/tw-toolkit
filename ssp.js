@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Tribal Wars — SSP (Single Screen Planner & Precision Snipe)
-// @version      3.8
-// @description  Planejador de ataques e snipes em tela única com cronômetro de precisão, hora de chegada e disparo automático
+// @version      3.9
+// @description  Planejador de ataques e snipes em tela única com cronômetro de precisão, arredondamento exato e disparo no milissegundo correto
 // @author       Azuelos
 // @match        https://*.tribalwars.com.br/game.php*
 // @grant        none
@@ -12,7 +12,7 @@
  * Tribal Wars BR / Internacional
  *
  * Repositório: https://github.com/Azuelos/tw-toolkit
- * Versão: 3.8 (Envio Direto para Confirmação + Cronômetro HUD com Hora de Chegada + Disparo Automático + Calibrador de Ping)
+ * Versão: 3.9 (Precisão Absoluta de Milissegundos — Duração em Segundos Inteiros + Offset Seguro 0ms)
  */
 
 var isMobile = (typeof mobile !== 'undefined' && Boolean(mobile)) || (typeof game_data !== 'undefined' && game_data.device === 'mobile');
@@ -404,25 +404,16 @@ function calibrarPingAutomatico(callback) {
     }
     var avgRtt = sum / samples.length;
 
-    // Compensação estimada: ida do pacote (metade do RTT)
-    var compensationMs = Math.round(avgRtt / 2);
-    if (compensationMs < 5) compensationMs = 5;
-
-    $("#ssp_offset_ms").val(compensationMs);
-
-    try {
-      localStorage.setItem("ssp_calibrated_ping", compensationMs);
-    } catch (e) {}
-
+    // Apenas informa a latência medida sem forçar antecipação que possa cair no segundo anterior
     if (feedbackEl.length) {
-      feedbackEl.css("color", "#55ff55").text("✓ " + compensationMs + "ms (Ping: " + Math.round(avgRtt) + "ms)");
+      feedbackEl.css("color", "#55ff55").text("Ping medido: " + Math.round(avgRtt) + "ms");
     }
 
     if (typeof UI !== 'undefined' && UI.InfoMessage) {
-      UI.InfoMessage("Ping médio: " + Math.round(avgRtt) + "ms | Compensação definida: " + compensationMs + "ms!", 3000, "success");
+      UI.InfoMessage("Ping medido: " + Math.round(avgRtt) + "ms. Compensação mantida em 0ms por segurança.", 4000, "info");
     }
 
-    if (callback) callback(compensationMs, avgRtt);
+    if (callback) callback(0, avgRtt);
   }
 
   runSample();
@@ -496,19 +487,20 @@ function desenharSnipeHUD(targetTimestamp, arrivalTimestamp) {
     "    <div id='ssp_countdown_display' style='font-size: 34px; font-weight: bold; font-family: monospace; letter-spacing: 2px; color: #ffffff;'>00:00.000</div>" +
     "    <div id='ssp_status_badge' style='margin-top: 6px; font-size: 13px; font-weight: bold; padding: 4px 10px; border-radius: 4px; display: inline-block; background: #333; color: #aaa;'>Aguardando momento ideal...</div>" +
     "  </div>" +
-    "  <div style='background: rgba(255,255,255,0.06); padding: 8px 12px; border-radius: 6px; margin-bottom: 10px; font-size: 12px; display: flex; justify-content: center; align-items: center; gap: 15px; flex-wrap: wrap;'>" +
+    "  <div style='background: rgba(255,255,255,0.06); padding: 8px 12px; border-radius: 6px; margin-bottom: 10px; font-size: 12px; display: flex; justify-content: center; align-items: center; gap: 12px; flex-wrap: wrap;'>" +
     "    <label style='display: flex; align-items: center; gap: 6px; cursor: pointer; font-weight: bold; color: #ffaa33;'>" +
     "      <input type='checkbox' id='ssp_auto_fire' style='width: 16px; height: 16px; cursor: pointer;'> ⚡ Ativar Disparo Automático" +
     "    </label>" +
     "    <span style='color: #888;'>|</span>" +
     "    <label style='display: flex; align-items: center; gap: 4px; color: #ccc;'>" +
-    "      Compensação/Ping: <input type='number' id='ssp_offset_ms' value='0' step='5' style='width: 55px; text-align: center; background: #222; color: #fff; border: 1px solid #666; border-radius: 3px; padding: 2px;'> ms" +
+    "      Compensação: <input type='number' id='ssp_offset_ms' value='0' min='0' step='5' style='width: 50px; text-align: center; background: #222; color: #fff; border: 1px solid #666; border-radius: 3px; padding: 2px;'> ms" +
     "    </label>" +
-    "    <button id='ssp_calibrate_ping' type='button' style='font-size: 11px; background: #2a4060; color: #77ddff; border: 1px solid #4488bb; padding: 3px 8px; border-radius: 4px; cursor: pointer; font-weight: bold;'>⚡ Auto Calibrar</button>" +
+    "    <button id='ssp_calibrate_ping' type='button' style='font-size: 11px; background: #2a4060; color: #77ddff; border: 1px solid #4488bb; padding: 3px 8px; border-radius: 4px; cursor: pointer; font-weight: bold;'>⚡ Medir Ping</button>" +
+    "    <button id='ssp_reset_offset' type='button' style='font-size: 11px; background: #3c2a2a; color: #ffaaaa; border: 1px solid #774444; padding: 3px 6px; border-radius: 4px; cursor: pointer;'>0ms (Zerar)</button>" +
     "    <span id='ssp_ping_feedback' style='font-size: 11px; font-weight: bold;'></span>" +
     "  </div>" +
     "  <div style='font-size: 11px; color: #bbb; line-height: 1.4;'>" +
-    "    💡 <strong>Dica de Tolerância (±75ms):</strong> Nos últimos 3s soam bips sonoros. Quando o cronômetro zerar e a barra ficar <span style='color:#00ff00; font-weight:bold;'>VERDE</span>, aperte o botão de envio!<br>" +
+    "    💡 <strong>Precisão Milimétrica:</strong> Compensação padrão é <strong>0ms</strong> (garante que nunca dispare no segundo anterior).<br>" +
     "    ⚡ <strong>Modo Automático:</strong> Marque a caixa de disparo automático para envio no ms exato. Mantenha a aba aberta e visível.<br>" +
     "    <span style='color: #88cc88;'>O clique humano é 100% seguro contra detecção e mantém a sua conta protegida.</span>" +
     "  </div>" +
@@ -520,14 +512,15 @@ function desenharSnipeHUD(targetTimestamp, arrivalTimestamp) {
     $("#content_value").prepend(hudHtml);
   }
 
-  // Carrega calibração anterior de ping salva no localStorage
-  try {
-    var savedOffset = localStorage.getItem("ssp_calibrated_ping");
-    if (savedOffset && Number(savedOffset) > 0) {
-      $("#ssp_offset_ms").val(savedOffset);
-      $("#ssp_ping_feedback").css("color", "#55ff55").text("✓ " + savedOffset + "ms");
-    }
-  } catch (e) {}
+  // Por segurança e precisão total, inicia sempre em 0ms
+  $("#ssp_offset_ms").val(0);
+  try { localStorage.removeItem("ssp_calibrated_ping"); } catch (e) {}
+
+  $("#ssp_reset_offset").on("click", function() {
+    $("#ssp_offset_ms").val(0);
+    try { localStorage.removeItem("ssp_calibrated_ping"); } catch (e) {}
+    $("#ssp_ping_feedback").css("color", "#aaaaaa").text("✓ 0ms (Sem antecipação)");
+  });
 
   $("#ssp_calibrate_ping").on("click", function() {
     calibrarPingAutomatico();
@@ -611,8 +604,10 @@ function desenharSnipeHUD(targetTimestamp, arrivalTimestamp) {
         while ((obterTempoServidorMs() < triggerAt) && (performance.now() - startSpin < 30)) {
           // micro spin-lock
         }
-        dispararComando();
-        return;
+        if (obterTempoServidorMs() >= triggerAt) {
+          dispararComando();
+          return;
+        }
       }
     }
 
@@ -903,6 +898,14 @@ function escolherOpcoes() {
     return;
   }
 
+  var targetArrivalMs = 0;
+  if (_0x492574 && _0x492574.length >= 4) {
+    var rawMs = _0x492574[3];
+    if (rawMs.length === 1) targetArrivalMs = Number(rawMs) * 100;
+    else if (rawMs.length === 2) targetArrivalMs = Number(rawMs) * 10;
+    else targetArrivalMs = Number(rawMs.slice(0, 3));
+  }
+
   $("#lista_tropas th").each(function(_0x3460a3) {
     if (_0x3460a3 > info.velocidade.length) return;
     if (_0x3460a3 && $(this).hasClass("faded")) {
@@ -942,7 +945,8 @@ function escolherOpcoes() {
       }
       var a = Math.abs(Number(_0x56acf5[0]) - ax);
       var b = Math.abs(Number(_0x56acf5[1]) - ay);
-      var tempoDeslocacao = Math.sqrt(a * a + b * b) * info.velocidade[j] * 60;
+      // No Tribal Wars a duração de viagem é SEMPRE um número inteiro de segundos (arredondado pelo servidor)
+      var tempoDeslocacao = Math.round(Math.sqrt(a * a + b * b) * info.velocidade[j] * 60);
       if (tempoDeslocacao <= _0x2ee81b) {
         if (tempoDeslocacao > tropa_mais_lenta) {
           tropa_mais_lenta = tempoDeslocacao;
@@ -956,12 +960,13 @@ function escolherOpcoes() {
     }
 
     if (tropa_mais_lenta != 0) {
+      tropa_mais_lenta = Math.round(tropa_mais_lenta);
       var tmp = new Date(_0x3adafd);
       tmp.setSeconds(tmp.getSeconds() - tropa_mais_lenta);
       tempoSaida[_0x42d393] = new Date(tmp);
       var sOffset = obterOffsetServidor();
-      var targetArrivalUtc = Date.UTC(_0x10de71[2], _0x10de71[1] - 1, _0x10de71[0], _0x492574[0], _0x492574[1], _0x492574[2]) - sOffset;
-      var launchTs = targetArrivalUtc - Math.round(tropa_mais_lenta * 1000);
+      var targetArrivalUtc = Date.UTC(_0x10de71[2], _0x10de71[1] - 1, _0x10de71[0], _0x492574[0], _0x492574[1], _0x492574[2], targetArrivalMs) - sOffset;
+      var launchTs = targetArrivalUtc - (tropa_mais_lenta * 1000);
       var ddd = formatarDatas(tmp) + " às " + formatarHoras(tmp);
       var linkHref = info.linkComando + id[i] + "&screen=place&x=" + _0x56acf5[0] + "&y=" + _0x56acf5[1] + tropa_possiveis;
       var targetCoordStr = _0x56acf5[0] + "|" + _0x56acf5[1];
@@ -1301,7 +1306,7 @@ function desenharPlanner(tempoAtual) {
 function dataCorreta(el, sep) {
   var x = el.value.match(/\d+/g);
   if (x && x.length >= 3) {
-    el.value = x[0] + sep + x[1] + sep + x[2];
+    el.value = x[0] + sep + x[1] + sep + x[2] + (x[3] ? ':' + x[3] : '');
   }
 }
 
@@ -1449,4 +1454,4 @@ window.calibrarPingAutomatico = calibrarPingAutomatico;
 
 // Inicia automaticamente
 iniciarSSP();
-console.log("🎯 SSP v3.8 (Single Screen Planner & Precision Snipe — Hora de Chegada & Calibrador de Ping) — Azuelos carregado com sucesso!");
+console.log("🎯 SSP v3.9 (Single Screen Planner & Precision Snipe — Duração Exata & Offset Seguro) — Azuelos carregado com sucesso!");
