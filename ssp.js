@@ -330,6 +330,103 @@ function formatarHoraCompletaMs(timestamp) {
   return strH + ':' + strM + ':' + strS + '.' + strMs;
 }
 
+// -------------------------------------------------------------
+// CALIBRADOR AUTOMÁTICO DE PING E LATÊNCIA
+// -------------------------------------------------------------
+function calibrarPingAutomatico(callback) {
+  var btnCalibrar = $("#ssp_calibrate_ping");
+  var feedbackEl = $("#ssp_ping_feedback");
+  if (btnCalibrar.length) {
+    btnCalibrar.prop("disabled", true).text("🔄 Medindo...");
+  }
+  if (feedbackEl.length) {
+    feedbackEl.css("color", "#ffcc00").text("Testando conexão...");
+  }
+
+  var vId = (typeof game_data !== 'undefined' && game_data.village && game_data.village.id) ? game_data.village.id : "";
+  var pingUrl = "/game.php?village=" + vId + "&ajax=ping_test";
+
+  var samples = [];
+  var totalTests = 5;
+  var currentTest = 0;
+
+  function runSample() {
+    var t0 = performance.now();
+    var xhr = new XMLHttpRequest();
+    xhr.open("GET", pingUrl + "&_t=" + Date.now() + "_" + currentTest, true);
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState === 4) {
+        var rtt = performance.now() - t0;
+        if (rtt > 5 && rtt < 3000) {
+          samples.push(rtt);
+        }
+        currentTest++;
+        if (currentTest < totalTests) {
+          setTimeout(runSample, 50);
+        } else {
+          finalizarCalibracao();
+        }
+      }
+    };
+    xhr.onerror = function() {
+      currentTest++;
+      if (currentTest < totalTests) {
+        setTimeout(runSample, 50);
+      } else {
+        finalizarCalibracao();
+      }
+    };
+    xhr.send(null);
+  }
+
+  function finalizarCalibracao() {
+    if (btnCalibrar.length) {
+      btnCalibrar.prop("disabled", false).text("⚡ Auto Calibrar");
+    }
+
+    if (samples.length === 0) {
+      if (feedbackEl.length) {
+        feedbackEl.css("color", "#ff5555").text("Falha ao medir ping");
+      }
+      return;
+    }
+
+    // Ordena para remover o pior pico (aquecimento de handshake)
+    samples.sort(function(a, b) { return a - b; });
+    if (samples.length > 2) {
+      samples.pop();
+    }
+
+    var sum = 0;
+    for (var i = 0; i < samples.length; i++) {
+      sum += samples[i];
+    }
+    var avgRtt = sum / samples.length;
+
+    // Compensação estimada: ida do pacote (metade do RTT)
+    var compensationMs = Math.round(avgRtt / 2);
+    if (compensationMs < 5) compensationMs = 5;
+
+    $("#ssp_offset_ms").val(compensationMs);
+
+    try {
+      localStorage.setItem("ssp_calibrated_ping", compensationMs);
+    } catch (e) {}
+
+    if (feedbackEl.length) {
+      feedbackEl.css("color", "#55ff55").text("✓ " + compensationMs + "ms (Ping: " + Math.round(avgRtt) + "ms)");
+    }
+
+    if (typeof UI !== 'undefined' && UI.InfoMessage) {
+      UI.InfoMessage("Ping médio: " + Math.round(avgRtt) + "ms | Compensação definida: " + compensationMs + "ms!", 3000, "success");
+    }
+
+    if (callback) callback(compensationMs, avgRtt);
+  }
+
+  runSample();
+}
+
 function desenharSnipeHUD(targetTimestamp) {
   if ($("#ssp_snipe_hud").length) {
     $("#ssp_snipe_hud").remove();
@@ -379,6 +476,8 @@ function desenharSnipeHUD(targetTimestamp) {
     "    <label style='display: flex; align-items: center; gap: 4px; color: #ccc;'>" +
     "      Compensação/Ping: <input type='number' id='ssp_offset_ms' value='0' step='5' style='width: 55px; text-align: center; background: #222; color: #fff; border: 1px solid #666; border-radius: 3px; padding: 2px;'> ms" +
     "    </label>" +
+    "    <button id='ssp_calibrate_ping' type='button' style='font-size: 11px; background: #2a4060; color: #77ddff; border: 1px solid #4488bb; padding: 3px 8px; border-radius: 4px; cursor: pointer; font-weight: bold;'>⚡ Auto Calibrar</button>" +
+    "    <span id='ssp_ping_feedback' style='font-size: 11px; font-weight: bold;'></span>" +
     "  </div>" +
     "  <div style='font-size: 11px; color: #bbb; line-height: 1.4;'>" +
     "    💡 <strong>Dica de Tolerância (±75ms):</strong> Nos últimos 3s soam bips sonoros. Quando o cronômetro zerar e a barra ficar <span style='color:#00ff00; font-weight:bold;'>VERDE</span>, aperte o botão de envio!<br>" +
@@ -392,6 +491,19 @@ function desenharSnipeHUD(targetTimestamp) {
   } else {
     $("#content_value").prepend(hudHtml);
   }
+
+  // Carrega calibração anterior de ping salva no localStorage
+  try {
+    var savedOffset = localStorage.getItem("ssp_calibrated_ping");
+    if (savedOffset && Number(savedOffset) > 0) {
+      $("#ssp_offset_ms").val(savedOffset);
+      $("#ssp_ping_feedback").css("color", "#55ff55").text("✓ " + savedOffset + "ms");
+    }
+  } catch (e) {}
+
+  $("#ssp_calibrate_ping").on("click", function() {
+    calibrarPingAutomatico();
+  });
 
   $("#ssp_close_hud").on("click", function() {
     $("#ssp_snipe_hud").remove();
@@ -1292,7 +1404,8 @@ window.salvarComandoSSP = salvarComandoSSP;
 window.desenharSnipeHUD = desenharSnipeHUD;
 window.enviarDiretoConfirmacao = enviarDiretoConfirmacao;
 window.submeterFormularioNativo = submeterFormularioNativo;
+window.calibrarPingAutomatico = calibrarPingAutomatico;
 
 // Inicia automaticamente
 iniciarSSP();
-console.log("🎯 SSP v3.6 (Single Screen Planner & Precision Snipe — Sincronizado Fuso Servidor) — Azuelos carregado com sucesso!");
+console.log("🎯 SSP v3.7 (Single Screen Planner & Precision Snipe — Calibrador de Ping Integrado) — Azuelos carregado com sucesso!");
