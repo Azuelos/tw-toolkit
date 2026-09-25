@@ -4,16 +4,13 @@
 Toolkit em JavaScript (Client-side / Userscript / Quickbar) para o jogo Tribal Wars.
 
 ## Estrutura do Projeto
-- `tw_overdosee_toolkit.js`: Script principal contendo toda a lógica de UI, módulos (FarmFinder, AutoFarm, AttackPlanner, CommandSniper, NobleTrain, ResourceHUD, IncomingAnalyzer) e integração com o jogo via `game_data` e DOM.
-- `overwatch-tropas.js`: Exporta texto copia-e-cola com cada jogador, aldeias, tropas em casa e a caminho (página oficial Defesa dos membros).
-- `ofensivas-academia.js`: Censo da **tribo** — Membros→Tropas e Membros→Edifícios (aba de cada jogador). Lista aldeias com academia e pop ofensiva (B×1 + CL×4 + Ar×5) >9000 e >18000, coordenadas **separadas por jogador**. Bookmarklet: `javascript:$.getScript("https://cdn.jsdelivr.net/gh/Azuelos/tw-toolkit@main/ofensivas-academia.js");`
+- `ssp.js`: Single Screen Planner (SSP) — Planejador de ataques e snipes em tela única com detecção automática de nobres entrantes, grupos e exportação BBCode.
+- `ofensivas-academia.js`: Censo da tribo por jogador (Tropas e Edifícios) com listas de 9k/18k.
+- `overwatch-tropas.js`: Bookmarklet de tropas para alimentação manual/auxiliar do Overwatch.
+- `tw_overdosee_toolkit.js`: Script contendo módulos de FarmFinder, AutoFarm, AttackPlanner, CommandSniper, NobleTrain, ResourceHUD e IncomingAnalyzer.
 - Repositório remoto: GitHub `Azuelos/tw-toolkit` servido via CDN jsDelivr.
 
-## Módulos
-1. `TW`: Dados globais e helper de janela.
-2. `UI`: Injeção de CSS, dashboard flutuante, janelas e formulários.
-3. `CommandSniper`: Temporizador de comandos com precisão de milissegundos usando relógio do servidor (`Timing.getCurrentServerTime()`).
-4. `FarmFinder`: Buscador e calculador de aldeias bárbaras.
-5. `FarmScheduler`: Agendador/automador de farm via assistente de saque.
-6. `AttackPlanner`: Planejador de ataques e tempos de viagem.
-7. `NobleTrain`: Trem de nobres com intervalo automático.
+## Formato de Execução via Barra Rápida (Quickbar)
+```javascript
+javascript:$.getScript("https://cdn.jsdelivr.net/gh/Azuelos/tw-toolkit@main/ssp.js");void(0);
+```
