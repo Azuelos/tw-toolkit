@@ -1,0 +1,561 @@
+/**
+ * Single Screen Planner (SSP) — Planejador de Ataques e Snipes em Tela Única
+ * Tribal Wars BR / Internacional
+ *
+ * Hospedado em: https://github.com/Azuelos/tw-toolkit
+ * Versão otimizada e limpa
+ */
+
+(function() {
+  if (!$("#planer_klinow").length) {
+    var configuracao = configuracaoMundo();
+    var info = {};
+    info.velocidade_jogo = Number($(configuracao).find("config speed").text());
+    info.velocidade_tropas = Number($(configuracao).find("config unit_speed").text());
+    info.arqueiros = Number($(configuracao).find("game archer").text());
+    info.paladino = Number($(configuracao).find("game knight").text());
+    info.linkTropas = "/game.php?&village=" + game_data.village.id + "&type=own_home&mode=units&group=0&page=-1&screen=overview_villages";
+    info.linkVisualizacaoGeral = "/game.php?";
+    info.linkComando = "/game.php?";
+    info.velocidade = [18, 22, 18, 18, 9, 10, 10, 11, 30, 30, 10, 35];
+    info.nomesTropas = [
+      "Lanceiro", "Espadachim", "Viking", "Arqueiro",
+      "Batedor", "Cavalaria leve", "Arqueiro a cavalo", "Cavalaria Pesada",
+      "Aríete", "Catapulta", "Paladino", "Nobre"
+    ];
+
+    var carregando = true;
+    var gruposCarregados = false;
+    var sort_of_low = true;
+    var img_tropas = image_base + "unit/";
+    var minimo_numero_tropas = [];
+    var tempoSaida = [];
+    var tempoUltrapassado = [];
+    var id = [];
+    var tropas = [];
+    var minhasAldeias = [];
+    var nomesAldeias = [];
+    var mostrarAldeias = [];
+    var tabelaBB = [];
+    var imagens = "spear,sword,axe,archer,spy,light,marcher,heavy,ram,catapult,knight,snob".split(',');
+    var unidadesAtivas = ("111" + (info.paladino ? '10' : '0')).split('');
+
+    if (!info.paladino) {
+      info.velocidade.splice(imagens.indexOf("knight"), 1);
+      info.nomesTropas.splice(imagens.indexOf("knight"), 1);
+      imagens.splice(imagens.indexOf("knight"), 1);
+    }
+    if (!info.arqueiros) {
+      info.velocidade.splice(imagens.indexOf("archer"), 1);
+      info.nomesTropas.splice(imagens.indexOf("archer"), 1);
+      imagens.splice(imagens.indexOf("archer"), 1);
+      info.velocidade.splice(imagens.indexOf("marcher"), 1);
+      info.nomesTropas.splice(imagens.indexOf("marcher"), 1);
+      imagens.splice(imagens.indexOf("marcher"), 1);
+    }
+
+    var propagacao = getCookie("atkjed");
+    if (propagacao != '') {
+      unidadesAtivas = parseInt(propagacao, 36).toString(2).split('');
+      while (unidadesAtivas.length < info.velocidade.length) {
+        unidadesAtivas.splice(0, 0, '0');
+      }
+    }
+
+    var t = $("#serverTime").html().match(/\d+/g);
+    var d = $("#serverDate").html().match(/\d+/g);
+    var tempoAtual = new Date(d[2], d[1] - 1, d[0], t[0], t[1], t[2]);
+
+    if (game_data.player.sitter != 0) {
+      info.linkTropas = "/game.php?t=" + game_data.player.id + "&village=" + game_data.village.id + "&type=own_home&mode=units&group=0&page=-1&screen=overview_villages";
+      info.linkVisualizacaoGeral += "t=" + game_data.player.id + "&village=" + game_data.village.id + "&screen=info_village&id=";
+      info.linkComando += "t=" + game_data.player.id + "&village=";
+    } else {
+      info.linkVisualizacaoGeral += "village=" + game_data.village.id + "&screen=info_village&id=";
+      info.linkComando += "village=";
+    }
+
+    var todasTropas = info.linkTropas;
+    var velocidade_mundo = Number((info.velocidade_jogo * info.velocidade_tropas).toFixed(5));
+
+    for (var i = 0; i < info.velocidade.length; i++) {
+      minimo_numero_tropas[i] = 0;
+      info.velocidade[i] /= velocidade_mundo;
+    }
+
+    desenharPlanner();
+    carregarInfo();
+  } else {
+    $("#planer_klinow").remove();
+  }
+
+  function escolherOpcoes() {
+    if (carregando) {
+      $("#carregamento").html("Aguarde enquanto carrega...");
+      setTimeout(escolherOpcoes, 500);
+      return;
+    }
+    if ($("#escolher_tropas").is(":visible")) {
+      mudarSeta();
+      $("#escolher_tropas").hide();
+      $("#lista_tropas").show();
+      guardarSelecao();
+    }
+    var _0x59487e = [];
+    var _0x335285 = [];
+    var _0x5b1439 = -1;
+    var _0x56acf5 = document.getElementById("objetivoCommun").value.match(/\d+/g);
+    var _0x492574 = document.getElementById("hora_input").value.match(/\d+/g);
+    var _0x10de71 = document.getElementById("data_input").value.match(/\d+/g);
+    var _0x41ab30 = document.getElementById("sigilias").value;
+
+    $("#lista_tropas th").each(function(_0x3460a3) {
+      if (_0x3460a3 > info.velocidade.length) return;
+      if (_0x3460a3 && $(this).hasClass("faded")) {
+        unidadesAtivas[_0x3460a3 - 1] = '0';
+      } else if (_0x3460a3) {
+        unidadesAtivas[_0x3460a3 - 1] = '1';
+      }
+    });
+
+    setCookie("atkjed", parseInt(unidadesAtivas.join(''), 2).toString(36), 360);
+
+    var _0x2c6563 = $("#serverTime").html().match(/\d+/g);
+    var _0x34468f = $("#serverDate").html().match(/\d+/g);
+    var _0x28246d = new Date(_0x34468f[2], _0x34468f[1] - 1, _0x34468f[0], _0x2c6563[0], _0x2c6563[1], _0x2c6563[2]);
+    var _0x3adafd = new Date(_0x10de71[2], _0x10de71[1] - 1, _0x10de71[0], _0x492574[0], _0x492574[1], _0x492574[2]);
+    var _0x2ee81b = (_0x3adafd - _0x28246d) / 1000;
+    var _0x42d393 = 0;
+
+    for (var i = 0; i < minhasAldeias.length; i++) {
+      if (!mostrarAldeias[i]) continue;
+      _0x335285[i] = "<tr><td><a href='" + info.linkVisualizacaoGeral + id[i] + "'>" + nomesAldeias[i].replace(/\s+/g, '\u00a0') + "</a></td>";
+      var tropa_mais_lenta = 0;
+      var tropa_possiveis = "&from=simulator";
+
+      for (var j = 0; j < info.velocidade.length; j++) {
+        if (unidadesAtivas[j] == '0' || tropas[i][j] < 1) {
+          _0x335285[i] += "<td class='hidden'>" + tropas[i][j] + "</td>";
+          continue;
+        }
+        var a = Math.abs(Number(_0x56acf5[0]) - minhasAldeias[i][minhasAldeias[i].length - 3]);
+        var b = Math.abs(Number(_0x56acf5[1]) - minhasAldeias[i][minhasAldeias[i].length - 2]);
+        var tempoDeslocacao = Math.sqrt(a * a + b * b) * info.velocidade[j] * 60;
+        if (tempoDeslocacao <= _0x2ee81b) {
+          if (tempoDeslocacao > tropa_mais_lenta) {
+            tropa_mais_lenta = tempoDeslocacao;
+            _0x5b1439 = j;
+          }
+          tropa_possiveis += "&att_" + imagens[j] + "=" + tropas[i][j];
+          _0x335285[i] += "<td style='background-color: #C3FFA5;'>" + tropas[i][j] + "</td>";
+        } else {
+          _0x335285[i] += "<td>" + tropas[i][j] + "</td>";
+        }
+      }
+
+      if (tropa_mais_lenta != 0) {
+        var tmp = new Date(_0x3adafd);
+        tmp.setSeconds(tmp.getSeconds() - tropa_mais_lenta);
+        tempoSaida[_0x42d393] = new Date(tmp);
+        var ddd = formatarDatas(tmp) + " às " + formatarHoras(tmp);
+        _0x59487e[_0x42d393] = _0x335285[i] + "<td>" + ddd + "</td><td>0</td><td><a href='" + info.linkComando + id[i] + "&screen=place&x=" + _0x56acf5[0] + "&y=" + _0x56acf5[1] + tropa_possiveis + "'>Enviar</a></td></tr>";
+        tabelaBB[_0x42d393] = "[*]" + info.nomesTropas[_0x5b1439] + "[|] " + minhasAldeias[i][minhasAldeias[i].length - 3] + "|" + minhasAldeias[i][minhasAldeias[i].length - 2] + " [|] " + _0x56acf5[0] + "|" + _0x56acf5[1] + " [|] " + ddd + " [|] [url=https://" + document.URL.split('/')[2] + info.linkComando + id[i] + "&screen=place&x=" + _0x56acf5[0] + "&y=" + _0x56acf5[1] + tropa_possiveis + "]Enviar\n";
+        _0x42d393++;
+      } else {
+        _0x335285[i] = '';
+      }
+    }
+
+    if (_0x42d393 == 0) {
+      UI.InfoMessage("Não há aldeias a tempo...", 1500, "error");
+    }
+    $("#numero_possibilidades").html("<b>" + _0x42d393 + "/" + minhasAldeias.length + "</b>");
+
+    for (var i = 0; i < _0x59487e.length - 1; i++) {
+      var min = i;
+      for (var j = i + 1; j < _0x59487e.length; j++) {
+        if (tempoSaida[min] > tempoSaida[j]) min = j;
+      }
+      var tmp = _0x59487e[min]; _0x59487e[min] = _0x59487e[i]; _0x59487e[i] = tmp;
+      tmp = tempoSaida[min]; tempoSaida[min] = tempoSaida[i]; tempoSaida[i] = tmp;
+      tmp = tabelaBB[min]; tabelaBB[min] = tabelaBB[i]; tabelaBB[i] = tmp;
+    }
+    tabelaBB.splice(_0x42d393, tabelaBB.length - _0x42d393);
+
+    $("#lista_tropas tbody").html(
+      _0x59487e.join('\n') +
+      (_0x42d393 ? "<tr><td id='export_bb' colspan=" + (info.velocidade.length + 4) + "><a href='#' onclick=\"$('#export_bb').html('<textarea cols=100 rows=2 onclick=\\'this.select()\\'>[table][**]Unidade[||]Fonte[||]Alvo[||]Hora de saída[||]Comando[/**]\\n' + tabelaBB.join('') + '[/table]</textarea>');\"><img src='" + image_base + "igm/export.png'> Exportar Código</a></td></tr>" : '')
+    );
+
+    $("#lista_tropas tbody tr").each(function(_0x3054d5) {
+      $(this).addClass(_0x3054d5 % 2 ? "row_a" : "row_b");
+    });
+    $("#carregamento").html('');
+    contar();
+  }
+
+  function contar() {
+    var _0x3e1638 = $("#serverTime").html().match(/\d+/g);
+    var _0x455f0f = $("#serverDate").html().match(/\d+/g);
+    var _0x3e450f = new Date(_0x455f0f[2], _0x455f0f[1] - 1, _0x455f0f[0], _0x3e1638[0], _0x3e1638[1], _0x3e1638[2]);
+
+    $("#lista_tropas tbody > tr").each(function(_0x51477e) {
+      var tempoDiferenca = (tempoSaida[_0x51477e] - _0x3e450f) / 1000;
+      if (tempoDiferenca > 60) {
+        $(this).find('td').eq(info.velocidade.length + 2).html(formatarHora(tempoDiferenca));
+      } else {
+        $(this).find('td').eq(info.velocidade.length + 2).html("<font color='red'>" + tempoDiferenca + "</font>");
+      }
+    });
+    setTimeout(contar, 1000);
+  }
+
+  function formatarHora(_0x22622a) {
+    var _0x2cb4c8 = Math.floor(_0x22622a / 3600);
+    _0x22622a = _0x22622a - _0x2cb4c8 * 3600;
+    var _0x4734ce = Math.floor(_0x22622a / 60);
+    _0x22622a = _0x22622a - _0x4734ce * 60;
+    return _0x2cb4c8 + ':' + (_0x4734ce < 10 ? '0' + _0x4734ce : _0x4734ce) + ':' + (_0x22622a < 10 ? '0' + _0x22622a : _0x22622a);
+  }
+
+  function mudarGrupo() {
+    $("#carregamento").html("<img src='" + image_base + "throbber.gif' />");
+    tropas = [];
+    id = [];
+    minhasAldeias = [];
+    nomesAldeias = [];
+    info.linkTropas = document.getElementById("listGrup").value;
+    carregarInfo();
+  }
+
+  function verificarTudo(_0x335a5f) {
+    var checkboxes = document.getElementsByName("selecao");
+    for (var _0x2a1e35 = 0, _0xfc5421 = checkboxes.length; _0x2a1e35 < _0xfc5421; _0x2a1e35++) {
+      checkboxes[_0x2a1e35].checked = _0x335a5f.checked;
+    }
+  }
+
+  function definirMinimo(_0x5076db) {
+    var el = document.getElementById("escolher_tropas");
+    var inputs = el.getElementsByTagName("input");
+    for (var i = 0; i < info.velocidade.length; i++) {
+      inputs[i].value = _0x5076db;
+      minimo_numero_tropas[i] = _0x5076db;
+    }
+  }
+
+  function esconderTropas(_0x44c73b, _0x17f445) {
+    _0x17f445 = Number(_0x17f445);
+    minimo_numero_tropas[_0x44c73b] = _0x17f445;
+    $("#escolher_tropas tr:has(td)").each(function() {
+      var tt = 0;
+      if ($(this).find('td').eq(_0x44c73b + 1).text() < _0x17f445) {
+        $(this).hide();
+        $(this).find("input").prop("checked", false);
+      } else {
+        for (var j = 0; j < minimo_numero_tropas.length; j++) {
+          if ($(this).find('td').eq(j + 1).text() >= minimo_numero_tropas[j]) tt++;
+        }
+      }
+      if (tt == info.velocidade.length) {
+        $(this).show();
+        $(this).find("input").prop("checked", true);
+      } else {
+        $(this).hide();
+        $(this).find("input").prop("checked", false);
+      }
+    });
+  }
+
+  function ordenarVisualizacao(_0x17f829) {
+    _0x17f829++;
+    var _0x5dbf59 = [];
+    var _0x45db74 = document.getElementById("escolher_tropas");
+    var x;
+    if (x = _0x45db74.rows[1].cells[_0x17f829].getElementsByTagName("img")[!_0x17f829 || _0x17f829 == info.velocidade.length + 1 ? 0 : 1]) {
+      x.src = sort_of_low ? image_base + "list-up.png" : image_base + "list-down.png";
+      sort_of_low = !sort_of_low;
+    } else {
+      _0x45db74.rows[1].cells[_0x17f829].innerHTML += "<img src='" + image_base + "list-down.png'>";
+      sort_of_low = true;
+    }
+
+    for (var i = 0; i < _0x45db74.rows[1].cells.length; i++) {
+      if (i == _0x17f829) continue;
+      if (x = _0x45db74.rows[1].cells[i].getElementsByTagName("img")[!i || i == info.velocidade.length + 1 ? 0 : 1]) {
+        x.remove();
+      }
+    }
+
+    $("[name='selecao']").each(function() {
+      _0x5dbf59.push($(this).is(":checked"));
+    });
+
+    for (var i = 2; i < _0x45db74.rows.length - 1; i++) {
+      if (_0x45db74.rows[i].style.display == "none") continue;
+      var min = i;
+      for (var j = i + 1; j < _0x45db74.rows.length; j++) {
+        if (_0x45db74.rows[j].style.display == "none") continue;
+        if (_0x17f829 == 0) {
+          if (_0x45db74.rows[sort_of_low ? j : min].cells[_0x17f829].textContent > _0x45db74.rows[sort_of_low ? min : j].cells[_0x17f829].textContent) {
+            min = j;
+          }
+        }
+        if (Number(_0x45db74.rows[sort_of_low ? j : min].cells[_0x17f829].textContent) > Number(_0x45db74.rows[sort_of_low ? min : j].cells[_0x17f829].textContent)) {
+          min = j;
+        }
+      }
+      var tmp = _0x45db74.rows[min].innerHTML;
+      _0x45db74.rows[min].innerHTML = _0x45db74.rows[i].innerHTML;
+      _0x45db74.rows[i].innerHTML = tmp;
+      var tmp2 = _0x5dbf59[i - 2];
+      _0x5dbf59[i - 2] = _0x5dbf59[min - 2];
+      _0x5dbf59[min - 2] = tmp2;
+    }
+
+    $("[name='selecao']").each(function(_0x5aa115) {
+      $(this).prop("checked", _0x5dbf59[_0x5aa115]);
+    });
+  }
+
+  function selecionarAldeias() {
+    var _0x3a5f52;
+    var janela = "<tr><th style=\"cursor:pointer;\" onclick=\"definirMinimo(0); $('#escolher_tropas tr:has(td)').each(function(i){$(this).show();});\">Número mínimo de tropas:</th>";
+    for (var i = 0; i < info.velocidade.length; i++) {
+      janela += "<th><input onchange=\"esconderTropas(" + i + ",this.value);\" type='text' value='" + minimo_numero_tropas[i] + "' size='1'></th>";
+    }
+    janela += "<th colspan=2></tr><tr><th style=\"cursor:pointer;\" onclick=\"ordenarVisualizacao(-1);\"><span class='icon header village'></span></th>";
+    for (var i = 0; i < imagens.length; i++) {
+      janela += "<th style=\"cursor:pointer;\" onclick=\"ordenarVisualizacao(" + i + ");\"><img src='" + img_tropas + "unit_" + imagens[i] + ".png'></th>";
+    }
+    janela += "<th style=\"cursor:pointer;\" onclick=\"ordenarVisualizacao(" + imagens.length + ");\">Dist</th><th><input type='checkbox' onClick='verificarTudo(this)'></th></tr>";
+
+    for (var i = 0; i < tropas.length; i++) {
+      var escondido = false;
+      var komorki = "<td><a href='" + info.linkVisualizacaoGeral + id[i] + "'>" + nomesAldeias[i].replace(/\s+/g, '\u00a0') + "</a></td>";
+      for (var j = 0; j < imagens.length; j++) {
+        komorki += "<td>" + tropas[i][j] + "</td>";
+        if (!escondido && tropas[i][j] < minimo_numero_tropas[i]) escondido = true;
+      }
+      if (!escondido) {
+        _0x3a5f52 = "<tr class='" + (i % 2 ? "row_a" : "row_b") + "'>";
+      } else {
+        _0x3a5f52 = "<tr class='" + (i % 2 ? "row_a" : "row_b") + "' style=\"display: none;\">";
+      }
+      janela += _0x3a5f52 + komorki;
+      janela += "<td></td><td><input name='selecao' type='checkbox' " + (mostrarAldeias[i] ? "checked" : "disabled") + "></td></tr>";
+    }
+
+    $("#escolher_tropas").html(janela);
+    mostrarDistancia();
+  }
+
+  function mostrarDistancia() {
+    var objEl = document.getElementById("objetivoCommun");
+    if (objEl && objEl.value) {
+      var match = objEl.value.match(/\d+\|\d+/);
+      if (match) objEl.value = match[0];
+    }
+    var coords = document.getElementById("objetivoCommun").value.match(/\d+/g);
+    if (!coords || coords.length < 2) return;
+
+    $("#escolher_tropas tr:has(td) td:nth-child(" + (info.velocidade.length + 2) + ")").each(function(_0x5dab34) {
+      if (!minhasAldeias[_0x5dab34]) return;
+      var a = Math.abs(Number(coords[0]) - minhasAldeias[_0x5dab34][minhasAldeias[_0x5dab34].length - 3]);
+      var b = Math.abs(Number(coords[1]) - minhasAldeias[_0x5dab34][minhasAldeias[_0x5dab34].length - 2]);
+      $(this).html(Number(Math.sqrt(a * a + b * b).toFixed(2)));
+    });
+  }
+
+  function guardarSelecao() {
+    $("#escolher_tropas input:checkbox").each(function(_0x301cb6) {
+      if (_0x301cb6) mostrarAldeias[_0x301cb6 - 1] = $(this).is(":checked");
+    });
+    $("#escolher_tropas").hide();
+    $("#lista_tropas").show();
+  }
+
+  function mudarSeta() {
+    if ($("#icone_seta").hasClass("arr_down")) {
+      $("#icone_seta").removeClass("arr_down");
+      $("#icone_seta").addClass("arr_up");
+    } else {
+      $("#icone_seta").removeClass("arr_up");
+      $("#icone_seta").addClass("arr_down");
+    }
+  }
+
+  function desenharPlanner() {
+    var coordAtual = game_data.village.x + '|' + game_data.village.y;
+    if (game_data.screen == "info_village") {
+      if (!mobile) {
+        var el = document.getElementById("content_value").getElementsByClassName("vis")[0];
+        if (el && el.rows && el.rows[2]) {
+          coordAtual = el.rows[2].cells[1].textContent;
+        }
+      } else {
+        var elMobile = document.getElementsByClassName("mobileKeyValue")[0];
+        if (elMobile) {
+          var div = elMobile.getElementsByTagName("div")[0];
+          if (div) {
+            var m = div.textContent.match(/\d+\|\d+/);
+            if (m) coordAtual = m[0];
+          }
+        }
+      }
+    }
+
+    var achouComando = false;
+    if ($(".no_ignored_command").length) {
+      $(".no_ignored_command").each(function() {
+        if ($(this).html().match("snob.png") && !achouComando) {
+          var tempo_de_entrada = $(this).find("td:eq(2)").text().match(/\d+/g);
+          if (tempo_de_entrada) {
+            tempoAtual.setSeconds(tempoAtual.getSeconds() + Number(tempo_de_entrada[2]) + 60 * Number(tempo_de_entrada[1]) + 3600 * Number(tempo_de_entrada[0]));
+            achouComando = true;
+          }
+        }
+      });
+    }
+
+    var html = "<div class='vis vis_item' align='center' style='overflow: auto; height: 450px;' id='planer_klinow'>" +
+      "<table width='100%'><tr><td width='300'>" +
+      "<table style='border-spacing: 3px; border-collapse: separate;'>" +
+      "<tr><th>Alvo</th><th>Data</th><th>Hora</th><th>Grupo</th><th></th><th></th><th>Autor</th></tr>" +
+      "<tr>" +
+      "<td><input size=8 type='text' onchange='mostrarDistancia();' value='" + coordAtual + "' id='objetivoCommun' /></td>" +
+      "<td><input size=8 type='text' value='" + formatarDatas(tempoAtual) + "' onchange=\"dataCorreta(this,'.');\" id='data_input'/></td>" +
+      "<td><input size=8 type='text' value='" + formatarHoras(tempoAtual) + "' onchange=\"dataCorreta(this,':');\" id='hora_input'/></td>" +
+      "<td><select id='listGrup' onchange='mudarGrupo();'><option value='" + todasTropas + "'>Todos</option></select></td>" +
+      "<td onclick=\"mudarSeta(); if($('#escolher_tropas').is(':visible')){ $('#escolher_tropas').hide();$('#lista_tropas').show(); guardarSelecao(); return;} else { $('#lista_tropas').hide(); $('#escolher_tropas').show(); }\" style='cursor:pointer;'><span id='icone_seta' class='icon header arr_down'></span></td>" +
+      "<td><input type='button' class='btn' value='CALCULAR' onclick='escolherOpcoes();' id='przycisk'></td>" +
+      "<td><b>Azuelos</b> (SSP)</td>" +
+      "<td style='display:none;'><input size='8' type='text' onchange='mostrarDistancia();' value='0' id='sigilias'></td>" +
+      "</tr>" +
+      "</table>" +
+      "</td><td id='carregamento'><img src='" + image_base + "throbber.gif' /></td></tr>" +
+      "<tr><td colspan=2 width='100%'>" +
+      "<table style='display: none; border-spacing: 3px; border-collapse: separate;' id='escolher_tropas' width='100%'></table>" +
+      "<table style='border-spacing: 3px; border-collapse: separate;' id='lista_tropas' width='100%'>" +
+      "<thead><tr>" +
+      "<th id='numero_possibilidades'><span class='icon header village'></span></th>";
+
+    for (var i = 0; i < imagens.length; i++) {
+      html += "<th style='cursor:pointer;' class='" + (unidadesAtivas[i] == '0' ? "faded" : '') + "' onClick=\"if(this.className == 'faded') this.className=''; else this.className='faded';\"><img title='" + info.nomesTropas[i] + "' src='" + img_tropas + "unit_" + imagens[i] + ".png'></th>";
+    }
+
+    html += "<th>Hora de Saída</th><th><span class='icon header time'></span></th><th><b>Comando</b></th></tr></thead><tbody></tbody></table>" +
+      "</td></tr></table></div>";
+
+    $(mobile ? "#mobileContent" : "#contentContainer").prepend(html);
+  }
+
+  function dataCorreta(el, sep) {
+    var x = el.value.match(/\d+/g);
+    if (x && x.length >= 3) {
+      el.value = x[0] + sep + x[1] + sep + x[2];
+    }
+  }
+
+  function carregarInfo() {
+    carregando = true;
+    var xhr = new XMLHttpRequest();
+    xhr.open("GET", info.linkTropas, true);
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState == 4 && xhr.status == 200) {
+        var requestedBody = document.createElement("body");
+        requestedBody.innerHTML = xhr.responseText;
+        var tableUnits = $(requestedBody).find("#units_table").get()[0];
+        var groupLinks = $(requestedBody).find(".vis_item").get()[0].getElementsByTagName(mobile ? "option" : 'a');
+
+        if (!tableUnits) {
+          $("#carregamento").html("Não existem aldeias neste grupo...");
+          carregando = false;
+          return;
+        }
+
+        for (var i = 1; i < tableUnits.rows.length; i++) {
+          mostrarAldeias[i - 1] = true;
+          tropas[i - 1] = [];
+          var pustaWioska = 0;
+          for (var j = 2; j < tableUnits.rows[i].cells.length - 1; j++) {
+            tropas[i - 1].push(tableUnits.rows[i].cells[j].textContent);
+            if (!Number(tropas[i - 1][j - 2])) pustaWioska++;
+          }
+          if (pustaWioska > info.velocidade.length) mostrarAldeias[i - 1] = false;
+          id.push(tableUnits.rows[i].cells[0].getElementsByTagName("span")[0].getAttribute("data-id"));
+          minhasAldeias.push(tableUnits.rows[i].cells[0].getElementsByTagName("span")[2].textContent.match(/\d+/g));
+          nomesAldeias.push(tableUnits.rows[i].cells[0].getElementsByTagName("span")[2].textContent);
+        }
+
+        selecionarAldeias();
+        if (gruposCarregados && $("#lista_tropas").is(":visible")) {
+          escolherOpcoes();
+        }
+
+        if (!gruposCarregados) {
+          for (var i = 0; i < groupLinks.length; i++) {
+            var nome = groupLinks[i].textContent;
+            if (mobile && groupLinks[i].textContent == "todos") continue;
+            $("#listGrup").append($("<option>", {
+              'value': groupLinks[i].getAttribute(mobile ? "value" : "href") + "&page=-1",
+              'text': mobile ? nome : nome.slice(1, nome.length - 1)
+            }));
+          }
+          gruposCarregados = true;
+        }
+
+        $("#carregamento").html('');
+        carregando = false;
+      }
+    };
+    xhr.send(null);
+  }
+
+  function formatarDatas(d) {
+    var dia = d.getDate() < 10 ? '0' + d.getDate() : d.getDate();
+    var mes = (d.getMonth() + 1) < 10 ? '0' + (d.getMonth() + 1) : (d.getMonth() + 1);
+    return String(dia + '/' + mes + '/' + d.getFullYear());
+  }
+
+  function formatarHoras(d) {
+    var h = d.getHours() < 10 ? '0' + d.getHours() : d.getHours();
+    var m = d.getMinutes() < 10 ? '0' + d.getMinutes() : d.getMinutes();
+    var s = d.getSeconds() < 10 ? '0' + d.getSeconds() : d.getSeconds();
+    return String(h + ':' + m + ':' + s);
+  }
+
+  function configuracaoMundo() {
+    var res;
+    $.ajax({
+      async: false,
+      url: "/interface.php?func=get_config",
+      dataType: "xml",
+      success: function(xml) {
+        res = xml;
+      }
+    });
+    return res;
+  }
+
+  function getCookie(name) {
+    var prefix = name + "=";
+    var cookies = document.cookie.split(';');
+    for (var i = 0; i < cookies.length; i++) {
+      var c = cookies[i];
+      while (c.charAt(0) == ' ') c = c.substring(1);
+      if (c.indexOf(prefix) != -1) return c.substring(prefix.length, c.length);
+    }
+    return '';
+  }
+
+  function setCookie(name, val, days) {
+    var date = new Date();
+    date.setTime(date.getTime() + days * 24 * 60 * 60 * 1000);
+    var expires = "expires=" + date.toGMTString();
+    if (days == 0) expires = '';
+    document.cookie = name + "=" + val + "; " + expires;
+  }
+
+  console.log("SSP (Single Screen Planner) — Azuelos / Tribal Wars carregado.");
+})();
