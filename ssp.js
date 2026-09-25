@@ -319,7 +319,7 @@ function iniciarObservadorRelogioServidor() {
       var d = ($("#serverDate").text() || "").match(/\d+/g);
       if (t && t.length >= 3) {
         var hr = Number(t[0]), min = Number(t[1]), sec = Number(t[2]);
-        var yr = 2026, mon = 9, day = 25;
+        var yr = new Date().getFullYear(), mon = new Date().getMonth() + 1, day = new Date().getDate();
         if (d && d.length >= 3) {
           day = Number(d[0]);
           mon = Number(d[1]);
