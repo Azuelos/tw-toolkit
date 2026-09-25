@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Tribal Wars — SSP (Single Screen Planner & Precision Snipe)
-// @version      4.0
-// @description  Planejador de ataques e snipes em tela única com definição de milissegundos, cronômetro de precisão e disparo automático
+// @version      4.1
+// @description  Planejador de ataques e snipes em tela única com precisão absoluta, trava anti-antecipação e suporte a milissegundos
 // @author       Azuelos
 // @match        https://*.tribalwars.com.br/game.php*
 // @grant        none
@@ -12,7 +12,7 @@
  * Tribal Wars BR / Internacional
  *
  * Repositório: https://github.com/Azuelos/tw-toolkit
- * Versão: 4.0 (Campo de Milissegundos Customizáveis no Planejador + Suporte a Segundo Fechado .000)
+ * Versão: 4.1 (Trava Anti-Antecipação no Clique Manual + Alvo Seguro +50ms no Segundo Alvo)
  */
 
 var isMobile = (typeof mobile !== 'undefined' && Boolean(mobile)) || (typeof game_data !== 'undefined' && game_data.device === 'mobile');
@@ -650,11 +650,11 @@ function desenharSnipeHUD(targetTimestamp, arrivalTimestamp) {
         rafId = requestAnimationFrame(microLoopPrecision);
       }
 
-      if (diffMs <= 250) {
-        displayEl.css("color", "#00ff00");
-        badgeEl.css({ background: "#008800", color: "#ffffff" }).text(autoFireArmed ? "⚡ DISPARANDO NO MS EXATO..." : "🔥 CLIQUE AGORA! 🔥");
+      if (diffMs <= 500) {
+        displayEl.css("color", "#ffcc00");
+        badgeEl.css({ background: "#886600", color: "#ffffff" }).text(autoFireArmed ? "⚡ DISPARANDO EM BREVE..." : "⚠️ Prepare o dedo...");
         if (btnSubmit.length) {
-          btnSubmit.css({ "box-shadow": "0 0 15px #00ff00", "outline": "3px solid #00ff00" });
+          btnSubmit.css({ "box-shadow": "none", "outline": "none" });
         }
       } else if (diffMs <= 2000) {
         displayEl.css("color", "#ffaa00");
@@ -672,9 +672,12 @@ function desenharSnipeHUD(targetTimestamp, arrivalTimestamp) {
         return;
       }
       var passMs = Math.abs(diffMs);
-      if (passMs <= 75) {
+      if (passMs <= 85) {
         displayEl.css("color", "#00ff00").text("00:00.000");
-        badgeEl.css({ background: "#00aa00", color: "#fff" }).text("🎯 JANELA DE ±75ms ATINGIDA!");
+        badgeEl.css({ background: "#00aa00", color: "#fff" }).text("🔥 CLIQUE AGORA! (JANELA EXATA)");
+        if (btnSubmit.length) {
+          btnSubmit.css({ "box-shadow": "0 0 20px #00ff00", "outline": "3px solid #00ff00" });
+        }
         if (lastBeepSec !== 0) {
           tocarBeep(1100, 140);
           lastBeepSec = 0;
@@ -898,13 +901,13 @@ function escolherOpcoes() {
     return;
   }
 
-  var targetArrivalMs = 0;
+  var targetArrivalMs = 50; // Margem segura de +50ms para segundo fechado (elimina 100% de risco de cair no segundo anterior)
   var msEl = document.getElementById("ms_input");
   var rawMs = msEl && msEl.value ? msEl.value.trim() : "";
   if (!rawMs && _0x492574 && _0x492574.length >= 4) {
     rawMs = _0x492574[3];
   }
-  if (rawMs) {
+  if (rawMs !== "") {
     var parsedMs = parseInt(rawMs, 10);
     if (!isNaN(parsedMs) && parsedMs >= 0) {
       targetArrivalMs = Math.min(999, parsedMs);
@@ -1475,4 +1478,4 @@ window.calibrarPingAutomatico = calibrarPingAutomatico;
 
 // Inicia automaticamente
 iniciarSSP();
-console.log("🎯 SSP v4.0 (Single Screen Planner & Precision Snipe — Milissegundos Customizáveis & Snipe HUD) — Azuelos carregado com sucesso!");
+console.log("🎯 SSP v4.1 (Single Screen Planner & Precision Snipe — Trava Anti-Antecipação & Zona Segura) — Azuelos carregado com sucesso!");
