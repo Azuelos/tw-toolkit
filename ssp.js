@@ -288,27 +288,46 @@ function submeterFormularioNativo(actionUrl, formOrig, targetCoord, paramsUrl, t
 // -------------------------------------------------------------
 // ASSISTENTE DE CONFIRMAÇÃO (SNIPE HUD + DISPARO AUTOMÁTICO)
 // -------------------------------------------------------------
+// SINCRONIZAÇÃO DE TEMPO DO SERVIDOR E FUSO HORÁRIO
+// -------------------------------------------------------------
+function obterOffsetServidor() {
+  try {
+    var t = $("#serverTime").text().match(/\d+/g);
+    var d = $("#serverDate").text().match(/\d+/g);
+    if (t && d && t.length >= 3 && d.length >= 3) {
+      var serverSec = Number(t[0]) * 3600 + Number(t[1]) * 60 + Number(t[2]);
+      var nowUtc = (typeof Timing !== 'undefined' && Timing.getCurrentServerTime) ? Timing.getCurrentServerTime() : Date.now();
+      var utcDate = new Date(nowUtc);
+      var utcSec = utcDate.getUTCHours() * 3600 + utcDate.getUTCMinutes() * 60 + utcDate.getUTCSeconds();
+      var diffSec = serverSec - utcSec;
+      while (diffSec > 12 * 3600) diffSec -= 24 * 3600;
+      while (diffSec < -12 * 3600) diffSec += 24 * 3600;
+      return Math.round(diffSec / 1800) * 1800 * 1000;
+    }
+  } catch (e) {}
+  return -3 * 3600 * 1000; // Padrão BR (-03:00)
+}
+
 function obterTempoServidorMs() {
   if (typeof Timing !== 'undefined' && Timing.getCurrentServerTime) {
     return Timing.getCurrentServerTime();
-  }
-  var t = $("#serverTime").html() ? $("#serverTime").html().match(/\d+/g) : null;
-  var d = $("#serverDate").html() ? $("#serverDate").html().match(/\d+/g) : null;
-  if (t && d && t.length >= 3 && d.length >= 3) {
-    return new Date(d[2], d[1] - 1, d[0], t[0], t[1], t[2]).getTime();
   }
   return Date.now();
 }
 
 function formatarHoraCompletaMs(timestamp) {
-  var d = new Date(timestamp);
-  var h = d.getHours() < 10 ? '0' + d.getHours() : d.getHours();
-  var m = d.getMinutes() < 10 ? '0' + d.getMinutes() : d.getMinutes();
-  var s = d.getSeconds() < 10 ? '0' + d.getSeconds() : d.getSeconds();
-  var ms = d.getMilliseconds();
-  if (ms < 10) ms = '00' + ms;
-  else if (ms < 100) ms = '0' + ms;
-  return h + ':' + m + ':' + s + '.' + ms;
+  var sOffset = obterOffsetServidor();
+  var serverTs = timestamp + sOffset;
+  var d = new Date(serverTs);
+  var h = d.getUTCHours();
+  var m = d.getUTCMinutes();
+  var s = d.getUTCSeconds();
+  var ms = Math.floor(d.getUTCMilliseconds());
+  var strH = h < 10 ? '0' + h : '' + h;
+  var strM = m < 10 ? '0' + m : '' + m;
+  var strS = s < 10 ? '0' + s : '' + s;
+  var strMs = ms < 10 ? '00' + ms : (ms < 100 ? '0' + ms : '' + ms);
+  return strH + ':' + strM + ':' + strS + '.' + strMs;
 }
 
 function desenharSnipeHUD(targetTimestamp) {
@@ -458,7 +477,7 @@ function desenharSnipeHUD(targetTimestamp) {
 
     var offsetMs = Number($("#ssp_offset_ms").val()) || 0;
     var triggerAt = targetMs - offsetMs;
-    var diffMs = triggerAt - nowMs;
+    var diffMs = Math.round(triggerAt - nowMs);
     var displayEl = $("#ssp_countdown_display");
     var badgeEl = $("#ssp_status_badge");
 
@@ -466,10 +485,10 @@ function desenharSnipeHUD(targetTimestamp) {
       var totalSec = Math.floor(diffMs / 1000);
       var min = Math.floor(totalSec / 60);
       var sec = totalSec % 60;
-      var ms = diffMs % 1000;
-      var strMs = ms < 10 ? '00' + ms : (ms < 100 ? '0' + ms : ms);
-      var strSec = sec < 10 ? '0' + sec : sec;
-      var strMin = min < 10 ? '0' + min : min;
+      var ms = Math.floor(diffMs % 1000);
+      var strMs = ms < 10 ? '00' + ms : (ms < 100 ? '0' + ms : '' + ms);
+      var strSec = sec < 10 ? '0' + sec : '' + sec;
+      var strMin = min < 10 ? '0' + min : '' + min;
 
       displayEl.text(strMin + ':' + strSec + '.' + strMs);
 
@@ -516,7 +535,7 @@ function desenharSnipeHUD(targetTimestamp) {
         }
       } else {
         displayEl.css("color", "#ff4444").text("+" + (passMs / 1000).toFixed(3) + "s");
-        badgeEl.css({ background: "#660000", color: "#fff" }).text("Momento expirado (" + passMs + "ms atrás)");
+        badgeEl.css({ background: "#660000", color: "#fff" }).text("Momento expirado (" + Math.floor(passMs) + "ms atrás)");
         if (btnSubmit.length) {
           btnSubmit.css({ "box-shadow": "none", "outline": "none" });
         }
@@ -787,7 +806,9 @@ function escolherOpcoes() {
       var tmp = new Date(_0x3adafd);
       tmp.setSeconds(tmp.getSeconds() - tropa_mais_lenta);
       tempoSaida[_0x42d393] = new Date(tmp);
-      var launchTs = tmp.getTime();
+      var sOffset = obterOffsetServidor();
+      var targetArrivalUtc = Date.UTC(_0x10de71[2], _0x10de71[1] - 1, _0x10de71[0], _0x492574[0], _0x492574[1], _0x492574[2]) - sOffset;
+      var launchTs = targetArrivalUtc - Math.round(tropa_mais_lenta * 1000);
       var ddd = formatarDatas(tmp) + " às " + formatarHoras(tmp);
       var linkHref = info.linkComando + id[i] + "&screen=place&x=" + _0x56acf5[0] + "&y=" + _0x56acf5[1] + tropa_possiveis;
       var targetCoordStr = _0x56acf5[0] + "|" + _0x56acf5[1];
@@ -1274,4 +1295,4 @@ window.submeterFormularioNativo = submeterFormularioNativo;
 
 // Inicia automaticamente
 iniciarSSP();
-console.log("🎯 SSP v3.5 (Single Screen Planner & Precision Snipe) — Azuelos carregado com sucesso!");
+console.log("🎯 SSP v3.6 (Single Screen Planner & Precision Snipe — Sincronizado Fuso Servidor) — Azuelos carregado com sucesso!");
