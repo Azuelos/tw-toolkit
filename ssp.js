@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Tribal Wars — SSP (Single Screen Planner & Precision Snipe)
-// @version      4.1
-// @description  Planejador de ataques e snipes em tela única com precisão absoluta, trava anti-antecipação e suporte a milissegundos
+// @version      4.2
+// @description  Planejador de ataques e snipes em tela única com precisão absoluta, trava inviolável de disparo automático e suporte a milissegundos
 // @author       Azuelos
 // @match        https://*.tribalwars.com.br/game.php*
 // @grant        none
@@ -12,7 +12,7 @@
  * Tribal Wars BR / Internacional
  *
  * Repositório: https://github.com/Azuelos/tw-toolkit
- * Versão: 4.1 (Trava Anti-Antecipação no Clique Manual + Alvo Seguro +50ms no Segundo Alvo)
+ * Versão: 4.2 (Trava Inviolável Anti-Segundo Anterior no Disparo Automático + Zona Segura +50ms)
  */
 
 var isMobile = (typeof mobile !== 'undefined' && Boolean(mobile)) || (typeof game_data !== 'undefined' && game_data.device === 'mobile');
@@ -593,6 +593,11 @@ function desenharSnipeHUD(targetTimestamp, arrivalTimestamp) {
     var nowMs = obterTempoServidorMs();
     var offsetMs = Number($("#ssp_offset_ms").val()) || 0;
     var triggerAt = targetMs - offsetMs;
+    // Trava de segurança: nunca permite que o triggerAt recue para o segundo anterior ao alvo
+    var targetSec = Math.floor(targetMs / 1000);
+    if ((targetMs % 1000 < 100) && Math.floor(triggerAt / 1000) < targetSec) {
+      triggerAt = targetSec * 1000;
+    }
     var remaining = triggerAt - nowMs;
 
     if (autoFireArmed) {
@@ -623,6 +628,10 @@ function desenharSnipeHUD(targetTimestamp, arrivalTimestamp) {
 
     var offsetMs = Number($("#ssp_offset_ms").val()) || 0;
     var triggerAt = targetMs - offsetMs;
+    var targetSec = Math.floor(targetMs / 1000);
+    if ((targetMs % 1000 < 100) && Math.floor(triggerAt / 1000) < targetSec) {
+      triggerAt = targetSec * 1000;
+    }
     var diffMs = Math.round(triggerAt - nowMs);
     var displayEl = $("#ssp_countdown_display");
     var badgeEl = $("#ssp_status_badge");
@@ -1478,4 +1487,4 @@ window.calibrarPingAutomatico = calibrarPingAutomatico;
 
 // Inicia automaticamente
 iniciarSSP();
-console.log("🎯 SSP v4.1 (Single Screen Planner & Precision Snipe — Trava Anti-Antecipação & Zona Segura) — Azuelos carregado com sucesso!");
+console.log("🎯 SSP v4.2 (Single Screen Planner & Precision Snipe — Trava Inviolável de Disparo Automático) — Azuelos carregado com sucesso!");
