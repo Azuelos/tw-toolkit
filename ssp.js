@@ -1,9 +1,9 @@
 /**
- * Single Screen Planner (SSP) — Planejador de Ataques e Snipes em Tela Única
+ * Single Screen Planner (SSP) — Planejador de Ataques e Snipes com Cronômetro de Precisão
  * Tribal Wars BR / Internacional
  *
  * Repositório: https://github.com/Azuelos/tw-toolkit
- * Versão: 2.1 (Otimizada e com escopo global para Quickbar)
+ * Versão: 3.0 (SSP + Assistente de Precisão / Snipe HUD na Confirmação)
  */
 
 var isMobile = (typeof mobile !== 'undefined' && Boolean(mobile)) || (typeof game_data !== 'undefined' && game_data.device === 'mobile');
@@ -26,8 +26,282 @@ var imagens = "spear,sword,axe,archer,spy,light,marcher,heavy,ram,catapult,knigh
 var unidadesAtivas = [];
 var info = {};
 var todasTropas = "";
+var snipeInterval = null;
+var audioHabilitado = true;
 
+// -------------------------------------------------------------
+// BEEP DE ÁUDIO VIA WEB AUDIO API (Zero dependências externas)
+// -------------------------------------------------------------
+function tocarBeep(frequencia, duracao) {
+  if (!audioHabilitado) return;
+  try {
+    var AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    var ctx = new AudioCtx();
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = frequencia || 800;
+    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + ((duracao || 80) / 1000));
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    setTimeout(function() {
+      try {
+        osc.stop();
+        ctx.close();
+      } catch (e) {}
+    }, (duracao || 80) + 20);
+  } catch (e) {}
+}
+
+// -------------------------------------------------------------
+// SALVAR COMANDO DO SSP PARA A TELA DE CONFIRMAÇÃO
+// -------------------------------------------------------------
+function salvarComandoSSP(villageId, targetCoord, launchTimestamp, paramsUrl) {
+  var dados = {
+    villageId: villageId,
+    targetCoord: targetCoord,
+    launchTimestamp: launchTimestamp,
+    paramsUrl: paramsUrl,
+    savedAt: Date.now()
+  };
+  try {
+    sessionStorage.setItem("ssp_pending_cmd", JSON.stringify(dados));
+    localStorage.setItem("ssp_last_cmd", JSON.stringify(dados));
+  } catch (e) {}
+}
+
+// -------------------------------------------------------------
+// ASSISTENTE DE CONFIRMAÇÃO (SNIPE HUD COM MILISSEGUNDOS)
+// -------------------------------------------------------------
+function obterTempoServidorMs() {
+  if (typeof Timing !== 'undefined' && Timing.getCurrentServerTime) {
+    return Timing.getCurrentServerTime();
+  }
+  var t = $("#serverTime").html() ? $("#serverTime").html().match(/\d+/g) : null;
+  var d = $("#serverDate").html() ? $("#serverDate").html().match(/\d+/g) : null;
+  if (t && d && t.length >= 3 && d.length >= 3) {
+    return new Date(d[2], d[1] - 1, d[0], t[0], t[1], t[2]).getTime();
+  }
+  return Date.now();
+}
+
+function formatarHoraCompletaMs(timestamp) {
+  var d = new Date(timestamp);
+  var h = d.getHours() < 10 ? '0' + d.getHours() : d.getHours();
+  var m = d.getMinutes() < 10 ? '0' + d.getMinutes() : d.getMinutes();
+  var s = d.getSeconds() < 10 ? '0' + d.getSeconds() : d.getSeconds();
+  var ms = d.getMilliseconds();
+  if (ms < 10) ms = '00' + ms;
+  else if (ms < 100) ms = '0' + ms;
+  return h + ':' + m + ':' + s + '.' + ms;
+}
+
+function desenharSnipeHUD(targetTimestamp) {
+  if ($("#ssp_snipe_hud").length) {
+    $("#ssp_snipe_hud").remove();
+    if (snipeInterval) clearInterval(snipeInterval);
+    return;
+  }
+
+  var btnSubmit = $("#troop_confirm_submit");
+  if (!btnSubmit.length) {
+    btnSubmit = $('input[type="submit"].btn-attack, input[type="submit"].btn');
+  }
+
+  // Foco no botão de envio para facilitar clique humano por teclado/mouse
+  if (btnSubmit.length) {
+    btnSubmit.focus();
+  }
+
+  var hudHtml = "" +
+    "<div id='ssp_snipe_hud' style='margin: 15px auto; max-width: 650px; background: #222a1f; color: #fff; border: 3px solid #7d510f; border-radius: 8px; padding: 12px 18px; box-shadow: 0 4px 15px rgba(0,0,0,0.6); font-family: Verdana, sans-serif; text-align: center;'>" +
+    "  <div style='display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.15); padding-bottom: 6px; margin-bottom: 10px;'>" +
+    "    <span style='font-size: 13px; font-weight: bold; color: #ffcc00;'>🎯 SSP — Cronômetro de Precisão (Snipe / Apoio)</span>" +
+    "    <div>" +
+    "      <button id='ssp_toggle_audio' type='button' style='font-size: 11px; background: #3c4a2c; color: #fff; border: 1px solid #7d510f; padding: 2px 8px; border-radius: 4px; cursor: pointer; margin-right: 6px;'>🔊 Áudio: ON</button>" +
+    "      <button id='ssp_close_hud' type='button' style='font-size: 11px; background: #661111; color: #fff; border: 1px solid #990000; padding: 2px 6px; border-radius: 4px; cursor: pointer;'>✖</button>" +
+    "    </div>" +
+    "  </div>" +
+    "  <div style='display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; font-size: 12px;'>" +
+    "    <div style='background: rgba(0,0,0,0.3); padding: 8px; border-radius: 5px;'>" +
+    "      <span style='color: #aaa;'>Hora Oficial do Servidor:</span><br>" +
+    "      <strong id='ssp_server_clock' style='font-size: 15px; color: #55ff55;'>--:--:--.---</strong>" +
+    "    </div>" +
+    "    <div style='background: rgba(0,0,0,0.3); padding: 8px; border-radius: 5px;'>" +
+    "      <span style='color: #aaa;'>Hora de Disparo Alvo:</span><br>" +
+    "      <strong id='ssp_target_clock' style='font-size: 15px; color: #ffdd44;'>--:--:--.---</strong>" +
+    "    </div>" +
+    "  </div>" +
+    "  <div style='background: #111; border: 2px solid #444; border-radius: 6px; padding: 12px; margin-bottom: 10px;'>" +
+    "    <div style='font-size: 12px; color: #ccc; margin-bottom: 4px;'>CONTAGEM REGRESSIVA PARA O CLIQUE:</div>" +
+    "    <div id='ssp_countdown_display' style='font-size: 34px; font-weight: bold; font-family: monospace; letter-spacing: 2px; color: #ffffff;'>00:00.000</div>" +
+    "    <div id='ssp_status_badge' style='margin-top: 6px; font-size: 13px; font-weight: bold; padding: 4px 10px; border-radius: 4px; display: inline-block; background: #333; color: #aaa;'>Aguardando...</div>" +
+    "  </div>" +
+    "  <div style='font-size: 11px; color: #bbb; line-height: 1.4;'>" +
+    "    💡 <strong>Dica de Tolerância (±75ms):</strong> Nos últimos 3s soam bips sonoros. Quando o cronômetro zerar e a barra ficar <span style='color:#00ff00; font-weight:bold;'>VERDE</span>, aperte o botão de envio!<br>" +
+    "    <span style='color: #ffaa55;'>O clique humano é 100% seguro contra detecção e mantém a sua conta protegida.</span>" +
+    "  </div>" +
+    "</div>";
+
+  if (btnSubmit.length) {
+    btnSubmit.closest("form").before(hudHtml);
+  } else {
+    $("#content_value").prepend(hudHtml);
+  }
+
+  $("#ssp_close_hud").on("click", function() {
+    $("#ssp_snipe_hud").remove();
+    if (snipeInterval) clearInterval(snipeInterval);
+  });
+
+  $("#ssp_toggle_audio").on("click", function() {
+    audioHabilitado = !audioHabilitado;
+    $(this).text(audioHabilitado ? "🔊 Áudio: ON" : "🔇 Áudio: OFF");
+  });
+
+  var targetMs = targetTimestamp || Date.now() + 60000;
+  $("#ssp_target_clock").text(formatarHoraCompletaMs(targetMs));
+
+  var lastBeepSec = -1;
+
+  snipeInterval = setInterval(function() {
+    var nowMs = obterTempoServidorMs();
+    $("#ssp_server_clock").text(formatarHoraCompletaMs(nowMs));
+
+    var diffMs = targetMs - nowMs;
+    var displayEl = $("#ssp_countdown_display");
+    var badgeEl = $("#ssp_status_badge");
+
+    if (diffMs > 0) {
+      var totalSec = Math.floor(diffMs / 1000);
+      var min = Math.floor(totalSec / 60);
+      var sec = totalSec % 60;
+      var ms = diffMs % 1000;
+      var strMs = ms < 10 ? '00' + ms : (ms < 100 ? '0' + ms : ms);
+      var strSec = sec < 10 ? '0' + sec : sec;
+      var strMin = min < 10 ? '0' + min : min;
+
+      displayEl.text(strMin + ':' + strSec + '.' + strMs);
+
+      // Bips sonoros sincronizados nos últimos 3 segundos
+      if (totalSec <= 3 && totalSec !== lastBeepSec) {
+        lastBeepSec = totalSec;
+        if (totalSec === 3) tocarBeep(650, 70);
+        else if (totalSec === 2) tocarBeep(750, 70);
+        else if (totalSec === 1) tocarBeep(850, 90);
+      }
+
+      // Estados Visuais
+      if (diffMs <= 200) {
+        displayEl.css("color", "#00ff00");
+        badgeEl.css({ background: "#008800", color: "#ffffff" }).text("🔥 CLIQUE AGORA! 🔥");
+        if (btnSubmit.length) {
+          btnSubmit.css({ "box-shadow": "0 0 15px #00ff00", "outline": "3px solid #00ff00" });
+        }
+      } else if (diffMs <= 2000) {
+        displayEl.css("color", "#ffaa00");
+        badgeEl.css({ background: "#aa5500", color: "#ffffff" }).text("⚠️ ATENÇÃO MÁXIMA — Prepare o dedo!");
+      } else if (diffMs <= 5000) {
+        displayEl.css("color", "#ffee55");
+        badgeEl.css({ background: "#665500", color: "#ffffff" }).text("🔔 PREPARE-SE...");
+      } else {
+        displayEl.css("color", "#ffffff");
+        badgeEl.css({ background: "#333333", color: "#aaaaaa" }).text("Aguardando momento ideal...");
+      }
+    } else {
+      // Passou do momento
+      var passMs = Math.abs(diffMs);
+      if (passMs <= 75) {
+        displayEl.css("color", "#00ff00").text("00:00.000");
+        badgeEl.css({ background: "#00aa00", color: "#fff" }).text("🎯 JANELA EXATA DE 75ms!");
+        if (lastBeepSec !== 0) {
+          tocarBeep(1100, 140);
+          lastBeepSec = 0;
+        }
+      } else {
+        displayEl.css("color", "#ff4444").text("+" + (passMs / 1000).toFixed(3) + "s");
+        badgeEl.css({ background: "#660000", color: "#fff" }).text("Comando expirado (" + passMs + "ms atrás)");
+        if (btnSubmit.length) {
+          btnSubmit.css({ "box-shadow": "none", "outline": "none" });
+        }
+      }
+    }
+  }, 25); // Atualização fluida a 40fps para precisão de milissegundos
+}
+
+// -------------------------------------------------------------
+// VERIFICAÇÃO AUTOMÁTICA DE TELAS AO CLICAR NO QUICKBAR
+// -------------------------------------------------------------
+function verificarTelaAtual() {
+  var isConfirmScreen = location.href.indexOf("try=confirm") !== -1 || $("#troop_confirm_submit").length > 0;
+  var isPlaceScreen = location.href.indexOf("screen=place") !== -1;
+
+  // 1. Se estiver na tela de confirmação de envio:
+  if (isConfirmScreen) {
+    var pendingCmd = null;
+    try {
+      var raw = sessionStorage.getItem("ssp_pending_cmd") || localStorage.getItem("ssp_last_cmd");
+      if (raw) pendingCmd = JSON.parse(raw);
+    } catch (e) {}
+
+    var targetMs = Date.now() + 30000; // default 30s se não houver comando pré-salvo
+    if (pendingCmd && pendingCmd.launchTimestamp) {
+      targetMs = pendingCmd.launchTimestamp;
+    }
+
+    desenharSnipeHUD(targetMs);
+    return true;
+  }
+
+  // 2. Se estiver na Praça de Reunião (1ª tela de envio):
+  if (isPlaceScreen) {
+    try {
+      var raw = sessionStorage.getItem("ssp_pending_cmd");
+      if (raw) {
+        var cmd = JSON.parse(raw);
+        if (cmd.targetCoord) {
+          var parts = cmd.targetCoord.split('|');
+          if (parts.length === 2) {
+            $('input[name="x"]').val(parts[0]);
+            $('input[name="y"]').val(parts[1]);
+          }
+        }
+        // Preenche tropas passadas na URL ou params
+        if (cmd.paramsUrl) {
+          var pairs = decodeURIComponent(cmd.paramsUrl).split('&');
+          pairs.forEach(function(pair) {
+            if (pair.indexOf("att_") === 0) {
+              var unitData = pair.replace("att_", "").split('=');
+              if (unitData.length === 2) {
+                var unitName = unitData[0];
+                var unitCount = unitData[1];
+                $('input[name="' + unitName + '"]').val(unitCount);
+              }
+            }
+          });
+        }
+        if (typeof UI !== 'undefined' && UI.InfoMessage) {
+          UI.InfoMessage("🎯 SSP: Tropas e coordenadas preenchidas! Clique em Apoiar ou Ataque para ir ao cronômetro.", 2500, "success");
+        }
+      }
+    } catch (e) {}
+  }
+
+  return false;
+}
+
+// -------------------------------------------------------------
+// NÚCLEO DO SINGLE SCREEN PLANNER (SSP)
+// -------------------------------------------------------------
 function iniciarSSP() {
+  // Se for tela de confirmação, abre o HUD de precisão diretamente
+  if (verificarTelaAtual()) {
+    return;
+  }
+
   if (!$("#planer_klinow").length) {
     var configuracao = configuracaoMundo();
     info = {};
@@ -171,9 +445,6 @@ function escolherOpcoes() {
     return;
   }
 
-  var sigEl = document.getElementById("sigilias");
-  var _0x41ab30 = sigEl ? sigEl.value : 0;
-
   $("#lista_tropas th").each(function(_0x3460a3) {
     if (_0x3460a3 > info.velocidade.length) return;
     if (_0x3460a3 && $(this).hasClass("faded")) {
@@ -230,9 +501,13 @@ function escolherOpcoes() {
       var tmp = new Date(_0x3adafd);
       tmp.setSeconds(tmp.getSeconds() - tropa_mais_lenta);
       tempoSaida[_0x42d393] = new Date(tmp);
+      var launchTs = tmp.getTime();
       var ddd = formatarDatas(tmp) + " às " + formatarHoras(tmp);
-      _0x59487e[_0x42d393] = _0x335285[i] + "<td>" + ddd + "</td><td>0</td><td><a href='" + info.linkComando + id[i] + "&screen=place&x=" + _0x56acf5[0] + "&y=" + _0x56acf5[1] + tropa_possiveis + "'>Enviar</a></td></tr>";
-      tabelaBB[_0x42d393] = "[*]" + info.nomesTropas[_0x5b1439] + "[|] " + ax + "|" + ay + " [|] " + _0x56acf5[0] + "|" + _0x56acf5[1] + " [|] " + ddd + " [|] [url=https://" + document.URL.split('/')[2] + info.linkComando + id[i] + "&screen=place&x=" + _0x56acf5[0] + "&y=" + _0x56acf5[1] + tropa_possiveis + "]Enviar\n";
+      var linkHref = info.linkComando + id[i] + "&screen=place&x=" + _0x56acf5[0] + "&y=" + _0x56acf5[1] + tropa_possiveis;
+      var targetCoordStr = _0x56acf5[0] + "|" + _0x56acf5[1];
+
+      _0x59487e[_0x42d393] = _0x335285[i] + "<td>" + ddd + "</td><td>0</td><td><a class='btn btn-ssp-enviar' href='" + linkHref + "' onclick=\"salvarComandoSSP('" + id[i] + "', '" + targetCoordStr + "', " + launchTs + ", '" + encodeURIComponent(tropa_possiveis) + "');\">Enviar</a></td></tr>";
+      tabelaBB[_0x42d393] = "[*]" + info.nomesTropas[_0x5b1439] + "[|] " + ax + "|" + ay + " [|] " + _0x56acf5[0] + "|" + _0x56acf5[1] + " [|] " + ddd + " [|] [url=https://" + document.URL.split('/')[2] + linkHref + "]Enviar\n";
       _0x42d393++;
     } else {
       _0x335285[i] = '';
@@ -543,7 +818,6 @@ function desenharPlanner(tempoAtual) {
 
   $(mobile ? "#mobileContent" : "#contentContainer").prepend(html);
 
-  // Garantir disparo direto via jQuery para evitar qualquer problema de inline onclick
   $(document).off('click', '#przycisk').on('click', '#przycisk', function(e) {
     if (e && e.preventDefault) e.preventDefault();
     escolherOpcoes();
@@ -693,6 +967,8 @@ window.dataCorreta = dataCorreta;
 window.carregarInfo = carregarInfo;
 window.verificarTudo = verificarTudo;
 window.iniciarSSP = iniciarSSP;
+window.salvarComandoSSP = salvarComandoSSP;
+window.desenharSnipeHUD = desenharSnipeHUD;
 
 // Inicia automaticamente
 iniciarSSP();
