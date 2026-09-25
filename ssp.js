@@ -295,35 +295,106 @@ function submeterFormularioNativo(actionUrl, formOrig, targetCoord, paramsUrl, t
 // -------------------------------------------------------------
 // ASSISTENTE DE CONFIRMAÇÃO (SNIPE HUD + DISPARO AUTOMÁTICO)
 // -------------------------------------------------------------
-// SINCRONIZAÇÃO DE TEMPO DO SERVIDOR E FUSO HORÁRIO
+// SINCRONIZAÇÃO ATÔMICA DO RELÓGIO DO SERVIDOR (ZERO DRIFT LOCAL)
 // -------------------------------------------------------------
+// O relógio do computador local pode divergir centenas de ms do servidor TW.
+// Monitoramos a virada exata de segundo no DOM (#serverTime) via MutationObserver
+// combinado com performance.now() monotônico de alta precisão.
+// -------------------------------------------------------------
+var sspClockSync = {
+  lastTickServerSec: null,    // Timestamp UTC do segundo exato exibido em #serverTime
+  lastTickPerf: null,         // performance.now() no instante exato da virada de segundo
+  observerStarted: false,
+  offsetFusoMs: -3 * 3600 * 1000 // Padrão BR (-03:00)
+};
+
+function iniciarObservadorRelogioServidor() {
+  if (sspClockSync.observerStarted) return;
+  var serverTimeEl = document.getElementById("serverTime");
+  if (!serverTimeEl) return;
+
+  function registrarTick(timeStr) {
+    try {
+      var t = (timeStr || "").match(/\d+/g);
+      var d = ($("#serverDate").text() || "").match(/\d+/g);
+      if (t && t.length >= 3) {
+        var hr = Number(t[0]), min = Number(t[1]), sec = Number(t[2]);
+        var yr = 2026, mon = 9, day = 25;
+        if (d && d.length >= 3) {
+          day = Number(d[0]);
+          mon = Number(d[1]);
+          yr = Number(d[2]);
+        }
+        var sOffset = obterOffsetServidor();
+        var utcMs = Date.UTC(yr, mon - 1, day, hr, min, sec, 0) - sOffset;
+        sspClockSync.lastTickServerSec = utcMs;
+        sspClockSync.lastTickPerf = performance.now();
+      }
+    } catch (e) {}
+  }
+
+  // Ponto de partida inicial
+  registrarTick(serverTimeEl.innerText || serverTimeEl.textContent);
+
+  try {
+    var observer = new MutationObserver(function() {
+      var txt = serverTimeEl.innerText || serverTimeEl.textContent;
+      registrarTick(txt);
+    });
+    observer.observe(serverTimeEl, { characterData: true, childList: true, subtree: true });
+    sspClockSync.observerStarted = true;
+  } catch (e) {}
+
+  // Fallback com polling de 25ms para garantir detecção mesmo sem MutationObserver
+  var lastKnownText = serverTimeEl.innerText || serverTimeEl.textContent;
+  setInterval(function() {
+    var curText = serverTimeEl.innerText || serverTimeEl.textContent;
+    if (curText !== lastKnownText) {
+      lastKnownText = curText;
+      registrarTick(curText);
+    }
+  }, 25);
+}
+
 function obterOffsetServidor() {
   try {
     var t = $("#serverTime").text().match(/\d+/g);
-    var d = $("#serverDate").text().match(/\d+/g);
-    if (t && d && t.length >= 3 && d.length >= 3) {
+    if (t && t.length >= 3) {
       var serverSec = Number(t[0]) * 3600 + Number(t[1]) * 60 + Number(t[2]);
-      var nowUtc = (typeof Timing !== 'undefined' && Timing.getCurrentServerTime) ? Timing.getCurrentServerTime() : Date.now();
+      var nowUtc = Date.now();
       var utcDate = new Date(nowUtc);
       var utcSec = utcDate.getUTCHours() * 3600 + utcDate.getUTCMinutes() * 60 + utcDate.getUTCSeconds();
       var diffSec = serverSec - utcSec;
       while (diffSec > 12 * 3600) diffSec -= 24 * 3600;
       while (diffSec < -12 * 3600) diffSec += 24 * 3600;
-      return Math.round(diffSec / 1800) * 1800 * 1000;
+      var offset = Math.round(diffSec / 1800) * 1800 * 1000;
+      sspClockSync.offsetFusoMs = offset;
+      return offset;
     }
   } catch (e) {}
-  return -3 * 3600 * 1000; // Padrão BR (-03:00)
+  return sspClockSync.offsetFusoMs || (-3 * 3600 * 1000);
 }
 
 function obterTempoServidorMs() {
-  if (typeof Timing !== 'undefined' && Timing.getCurrentServerTime) {
+  // 1. Motor nativo Timing do Tribal Wars (máxima fidelidade com o servidor e performance.now)
+  if (typeof Timing !== 'undefined' && typeof Timing.getCurrentServerTime === 'function') {
     return Timing.getCurrentServerTime();
   }
-  return Date.now();
+  // 2. Observador atômico de virada de segundo no DOM (#serverTime)
+  iniciarObservadorRelogioServidor();
+  if (sspClockSync.lastTickServerSec !== null && sspClockSync.lastTickPerf !== null) {
+    var elapsed = performance.now() - sspClockSync.lastTickPerf;
+    if (elapsed >= 0 && elapsed < 3500) {
+      return sspClockSync.lastTickServerSec + elapsed;
+    }
+  }
+  // 3. Fallback seguro
+  var sOffset = obterOffsetServidor();
+  return Date.now() + (sOffset - (-3 * 3600 * 1000));
 }
 
 function formatarHoraCompletaMs(timestamp) {
-  var sOffset = obterOffsetServidor();
+  var sOffset = (typeof window.server_utc_diff !== 'undefined') ? (window.server_utc_diff * 1000) : (sspClockSync.offsetFusoMs || obterOffsetServidor());
   var serverTs = timestamp + sOffset;
   var d = new Date(serverTs);
   var h = d.getUTCHours();
@@ -348,6 +419,21 @@ function calibrarPingAutomatico(callback) {
   }
   if (feedbackEl.length) {
     feedbackEl.css("color", "#ffcc00").text("Testando conexão...");
+  }
+
+  // 1. Prioriza a medição oficial do motor nativo do Tribal Wars se já calculada
+  if (typeof Timing !== 'undefined' && Timing.latency && typeof Timing.latency.getAverageLatency === 'function') {
+    var twLatency = Timing.latency.getAverageLatency();
+    if (twLatency && twLatency > 0) {
+      var pingVal = Math.round(twLatency);
+      if (btnCalibrar.length) btnCalibrar.prop("disabled", false).text("⚡ Medir Ping");
+      if (feedbackEl.length) feedbackEl.css("color", "#55ff55").text("Ping nativo TW: " + pingVal + "ms");
+      if (typeof UI !== 'undefined' && UI.InfoMessage) {
+        UI.InfoMessage("Ping oficial do servidor TW: " + pingVal + "ms.", 3000, "info");
+      }
+      if (callback) callback(0, pingVal);
+      return;
+    }
   }
 
   var vId = (typeof game_data !== 'undefined' && game_data.village && game_data.village.id) ? game_data.village.id : "";
@@ -429,7 +515,8 @@ function extrairHoraChegadaDaTela() {
   var arrivalText = "";
   $("table.vis tr").each(function() {
     var text = $(this).text();
-    if (text.indexOf("Chegada:") !== -1 || text.indexOf("Chegada") !== -1) {
+    // Garante que pega a linha "Chegada:" da hora exata e ignora "Chegada em:" (que é timer regressivo)
+    if ((text.indexOf("Chegada:") !== -1 || text.indexOf("Chegada") !== -1) && text.indexOf("Chegada em") === -1) {
       var tdVal = $(this).find("td:last").text().trim();
       if (tdVal && tdVal.indexOf("Chegada") === -1) {
         var match = tdVal.match(/(\d{1,2}:\d{2}:\d{2})(?:[:.](\d{1,3}))?/);
@@ -452,7 +539,8 @@ function extrairDuracaoSegundosDaTela() {
   var duracaoSec = null;
   $("table.vis tr").each(function() {
     var text = $(this).text();
-    if (text.indexOf("Duração:") !== -1 || text.indexOf("Duração") !== -1) {
+    // Garante que é a linha de duração da viagem e não outras tabelas
+    if ((text.indexOf("Duração:") !== -1 || text.indexOf("Duração") !== -1) && text.indexOf("Chegada") === -1) {
       var tdVal = $(this).find("td:last").text().trim();
       var parts = tdVal.match(/\d+/g);
       if (parts && parts.length >= 3) {
@@ -623,9 +711,15 @@ function desenharSnipeHUD(targetTimestamp, arrivalTimestamp) {
     var nowMs = obterTempoServidorMs();
     var offsetMs = Number($("#ssp_offset_ms").val()) || 0;
     var triggerAt = targetMs - offsetMs;
-    // Trava de segurança: nunca permite que o triggerAt recue para o segundo anterior ao alvo
+    // Trava de segurança absoluta: nunca permite que o triggerAt recue para o segundo anterior ao alvo
     var targetSec = Math.floor(targetMs / 1000);
-    if ((targetMs % 1000 < 100) && Math.floor(triggerAt / 1000) < targetSec) {
+    var isSegundoFechado = (targetMs % 1000 === 0);
+
+    if (isSegundoFechado && offsetMs === 0) {
+      // Para segundo fechado e 0ms de compensação, o disparo ocorre milimetricamente a +25ms do segundo alvo,
+      // garantindo que NUNCA antecipe no segundo anterior mesmo se a latência for ultra-baixa.
+      triggerAt = targetSec * 1000 + 25;
+    } else if (Math.floor(triggerAt / 1000) < targetSec) {
       triggerAt = targetSec * 1000;
     }
     var remaining = triggerAt - nowMs;
@@ -659,7 +753,11 @@ function desenharSnipeHUD(targetTimestamp, arrivalTimestamp) {
     var offsetMs = Number($("#ssp_offset_ms").val()) || 0;
     var triggerAt = targetMs - offsetMs;
     var targetSec = Math.floor(targetMs / 1000);
-    if ((targetMs % 1000 < 100) && Math.floor(triggerAt / 1000) < targetSec) {
+    var isSegundoFechado = (targetMs % 1000 === 0);
+
+    if (isSegundoFechado && offsetMs === 0) {
+      triggerAt = targetSec * 1000 + 25;
+    } else if (Math.floor(triggerAt / 1000) < targetSec) {
       triggerAt = targetSec * 1000;
     }
     var diffMs = Math.round(triggerAt - nowMs);
@@ -935,6 +1033,10 @@ function escolherOpcoes() {
   var dataEl = document.getElementById("data_input");
   var _0x492574 = horaEl && horaEl.value ? horaEl.value.match(/\d+/g) : null;
   var _0x10de71 = dataEl && dataEl.value ? dataEl.value.match(/\d+/g) : null;
+
+  if (_0x492574 && _0x492574.length === 2) {
+    _0x492574.push("00"); // Permite digitar ex: "4:04" tratando automaticamente como "04:04:00"
+  }
 
   if (!_0x492574 || _0x492574.length < 3 || !_0x10de71 || _0x10de71.length < 3) {
     if (typeof UI !== 'undefined' && UI.InfoMessage) {
@@ -1522,4 +1624,4 @@ window.calibrarPingAutomatico = calibrarPingAutomatico;
 
 // Inicia automaticamente
 iniciarSSP();
-console.log("🎯 SSP v4.3 (Single Screen Planner & Precision Snipe — Sincronização Real de Duração) — Azuelos carregado com sucesso!");
+console.log("🎯 SSP v4.4 (Single Screen Planner & Precision Snipe — Sincronização Atômica Nativa & Zero Antecipação) — Azuelos carregado com sucesso!");
