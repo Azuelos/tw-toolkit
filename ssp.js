@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Tribal Wars — SSP (Single Screen Planner & Precision Snipe)
-// @version      4.2
-// @description  Planejador de ataques e snipes em tela única com precisão absoluta, trava inviolável de disparo automático e suporte a milissegundos
+// @version      4.3
+// @description  Planejador de ataques e snipes em tela única com precisão absoluta, sincronização em tempo real da duração oficial e suporte a milissegundos
 // @author       Azuelos
 // @match        https://*.tribalwars.com.br/game.php*
 // @grant        none
@@ -12,7 +12,7 @@
  * Tribal Wars BR / Internacional
  *
  * Repositório: https://github.com/Azuelos/tw-toolkit
- * Versão: 4.2 (Trava Inviolável Anti-Segundo Anterior no Disparo Automático + Zona Segura +50ms)
+ * Versão: 4.3 (Sincronização em Tempo Real com a Duração Oficial do Servidor TW)
  */
 
 var isMobile = (typeof mobile !== 'undefined' && Boolean(mobile)) || (typeof game_data !== 'undefined' && game_data.device === 'mobile');
@@ -191,6 +191,12 @@ function enviarDiretoConfirmacao(villageId, targetCoord, launchTimestamp, params
                   mainContent.innerHTML = newContent.innerHTML;
                 } else {
                   $("#contentContainer").html(newContent.innerHTML);
+                }
+
+                // Sincroniza com a duração REAL oficial exibida na tabela de confirmação do TW
+                var realDuration = extrairDuracaoSegundosDaTela();
+                if (arrivalTimestamp && realDuration && realDuration > 0) {
+                  launchTimestamp = arrivalTimestamp - (realDuration * 1000);
                 }
 
                 // Renderiza o HUD de precisão imediatamente com o alvo e chegada já setados!
@@ -442,11 +448,35 @@ function extrairHoraChegadaDaTela() {
   return arrivalText;
 }
 
+function extrairDuracaoSegundosDaTela() {
+  var duracaoSec = null;
+  $("table.vis tr").each(function() {
+    var text = $(this).text();
+    if (text.indexOf("Duração:") !== -1 || text.indexOf("Duração") !== -1) {
+      var tdVal = $(this).find("td:last").text().trim();
+      var parts = tdVal.match(/\d+/g);
+      if (parts && parts.length >= 3) {
+        duracaoSec = Number(parts[0]) * 3600 + Number(parts[1]) * 60 + Number(parts[2]);
+      } else if (parts && parts.length === 2) {
+        duracaoSec = Number(parts[0]) * 60 + Number(parts[1]);
+      }
+    }
+  });
+  return duracaoSec;
+}
+
 function desenharSnipeHUD(targetTimestamp, arrivalTimestamp) {
   if ($("#ssp_snipe_hud").length) {
     $("#ssp_snipe_hud").remove();
     if (snipeInterval) clearInterval(snipeInterval);
     return;
+  }
+
+  // Sincronização inteligente com a duração oficial da tela de confirmação
+  var realDuration = extrairDuracaoSegundosDaTela();
+  if (arrivalTimestamp && realDuration && realDuration > 0) {
+    // Alinha milimetricamente o horário de disparo com a física exata do servidor TW
+    targetTimestamp = arrivalTimestamp - (realDuration * 1000);
   }
 
   var btnSubmit = $("#troop_confirm_submit");
@@ -724,6 +754,11 @@ function verificarTelaAtual() {
       arrivalMs = pendingCmd.arrivalTimestamp || null;
     }
 
+    var realDuration = extrairDuracaoSegundosDaTela();
+    if (arrivalMs && realDuration && realDuration > 0) {
+      targetMs = arrivalMs - (realDuration * 1000);
+    }
+
     desenharSnipeHUD(targetMs, arrivalMs);
     return true;
   }
@@ -910,7 +945,7 @@ function escolherOpcoes() {
     return;
   }
 
-  var targetArrivalMs = 50; // Margem segura de +50ms para segundo fechado (elimina 100% de risco de cair no segundo anterior)
+  var targetArrivalMs = 0; // Segundo exato fechado .000
   var msEl = document.getElementById("ms_input");
   var rawMs = msEl && msEl.value ? msEl.value.trim() : "";
   if (!rawMs && _0x492574 && _0x492574.length >= 4) {
@@ -1487,4 +1522,4 @@ window.calibrarPingAutomatico = calibrarPingAutomatico;
 
 // Inicia automaticamente
 iniciarSSP();
-console.log("🎯 SSP v4.2 (Single Screen Planner & Precision Snipe — Trava Inviolável de Disparo Automático) — Azuelos carregado com sucesso!");
+console.log("🎯 SSP v4.3 (Single Screen Planner & Precision Snipe — Sincronização Real de Duração) — Azuelos carregado com sucesso!");
