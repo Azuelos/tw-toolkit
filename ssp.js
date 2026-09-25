@@ -1110,6 +1110,18 @@ function desenharPlanner(tempoAtual) {
     if (e && e.preventDefault) e.preventDefault();
     escolherOpcoes();
   });
+  $(document).off('change', '#data_input').on('change', '#data_input', function() {
+    dataCorreta(this, '.');
+  });
+  $(document).off('change', '#hora_input').on('change', '#hora_input', function() {
+    dataCorreta(this, ':');
+  });
+  $(document).off('change', '#objetivoCommun').on('change', '#objetivoCommun', function() {
+    mostrarDistancia();
+  });
+  $(document).off('change', '#listGrup').on('change', '#listGrup', function() {
+    mudarGrupo();
+  });
 }
 
 function dataCorreta(el, sep) {
@@ -1262,3 +1274,4 @@ window.submeterFormularioNativo = submeterFormularioNativo;
 
 // Inicia automaticamente
 iniciarSSP();
+console.log("🎯 SSP v3.5 (Single Screen Planner & Precision Snipe) — Azuelos carregado com sucesso!");
