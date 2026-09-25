@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Tribal Wars — SSP (Single Screen Planner & Precision Snipe)
-// @version      3.9
-// @description  Planejador de ataques e snipes em tela única com cronômetro de precisão, arredondamento exato e disparo no milissegundo correto
+// @version      4.0
+// @description  Planejador de ataques e snipes em tela única com definição de milissegundos, cronômetro de precisão e disparo automático
 // @author       Azuelos
 // @match        https://*.tribalwars.com.br/game.php*
 // @grant        none
@@ -12,7 +12,7 @@
  * Tribal Wars BR / Internacional
  *
  * Repositório: https://github.com/Azuelos/tw-toolkit
- * Versão: 3.9 (Precisão Absoluta de Milissegundos — Duração em Segundos Inteiros + Offset Seguro 0ms)
+ * Versão: 4.0 (Campo de Milissegundos Customizáveis no Planejador + Suporte a Segundo Fechado .000)
  */
 
 var isMobile = (typeof mobile !== 'undefined' && Boolean(mobile)) || (typeof game_data !== 'undefined' && game_data.device === 'mobile');
@@ -899,11 +899,16 @@ function escolherOpcoes() {
   }
 
   var targetArrivalMs = 0;
-  if (_0x492574 && _0x492574.length >= 4) {
-    var rawMs = _0x492574[3];
-    if (rawMs.length === 1) targetArrivalMs = Number(rawMs) * 100;
-    else if (rawMs.length === 2) targetArrivalMs = Number(rawMs) * 10;
-    else targetArrivalMs = Number(rawMs.slice(0, 3));
+  var msEl = document.getElementById("ms_input");
+  var rawMs = msEl && msEl.value ? msEl.value.trim() : "";
+  if (!rawMs && _0x492574 && _0x492574.length >= 4) {
+    rawMs = _0x492574[3];
+  }
+  if (rawMs) {
+    var parsedMs = parseInt(rawMs, 10);
+    if (!isNaN(parsedMs) && parsedMs >= 0) {
+      targetArrivalMs = Math.min(999, parsedMs);
+    }
   }
 
   $("#lista_tropas th").each(function(_0x3460a3) {
@@ -967,7 +972,8 @@ function escolherOpcoes() {
       var sOffset = obterOffsetServidor();
       var targetArrivalUtc = Date.UTC(_0x10de71[2], _0x10de71[1] - 1, _0x10de71[0], _0x492574[0], _0x492574[1], _0x492574[2], targetArrivalMs) - sOffset;
       var launchTs = targetArrivalUtc - (tropa_mais_lenta * 1000);
-      var ddd = formatarDatas(tmp) + " às " + formatarHoras(tmp);
+      var msStr = targetArrivalMs > 0 ? (targetArrivalMs < 10 ? '.00' + targetArrivalMs : (targetArrivalMs < 100 ? '.0' + targetArrivalMs : '.' + targetArrivalMs)) : '';
+      var ddd = formatarDatas(tmp) + " às " + formatarHoras(tmp) + msStr;
       var linkHref = info.linkComando + id[i] + "&screen=place&x=" + _0x56acf5[0] + "&y=" + _0x56acf5[1] + tropa_possiveis;
       var targetCoordStr = _0x56acf5[0] + "|" + _0x56acf5[1];
 
@@ -1252,15 +1258,21 @@ function desenharPlanner(tempoAtual) {
     });
   }
 
+  var msInicial = "";
+  if (achouComando && typeof tempo_de_entrada !== 'undefined' && tempo_de_entrada && tempo_de_entrada.length >= 4) {
+    msInicial = tempo_de_entrada[3].slice(0, 3);
+  }
+
   var ib = typeof image_base !== 'undefined' ? image_base : '';
   var html = "<div class='vis vis_item' align='center' style='overflow: auto; height: 450px;' id='planer_klinow'>" +
     "<table width='100%'><tr><td width='300'>" +
     "<table style='border-spacing: 3px; border-collapse: separate;'>" +
-    "<tr><th>Alvo</th><th>Data</th><th>Hora</th><th>Grupo</th><th>Tipo</th><th></th><th></th><th>Autor</th></tr>" +
+    "<tr><th>Alvo</th><th>Data</th><th>Hora</th><th>Ms</th><th>Grupo</th><th>Tipo</th><th></th><th></th><th>Autor</th></tr>" +
     "<tr>" +
     "<td><input size=8 type='text' onchange='mostrarDistancia();' value='" + coordAtual + "' id='objetivoCommun' /></td>" +
     "<td><input size=8 type='text' value='" + formatarDatas(tempoAtual) + "' onchange=\"dataCorreta(this,'.');\" id='data_input'/></td>" +
-    "<td><input size=8 type='text' value='" + formatarHoras(tempoAtual) + "' onchange=\"dataCorreta(this,':');\" id='hora_input'/></td>" +
+    "<td><input size=8 type='text' value='" + formatarHoras(tempoAtual) + "' id='hora_input'/></td>" +
+    "<td><input size=4 type='text' value='" + msInicial + "' placeholder='000' maxlength=3 style='width: 44px; text-align: center;' id='ms_input' title='Milissegundos alvo (000-999). Deixe vazio ou 000 para segundo fechado.' /></td>" +
     "<td><select id='listGrup' onchange='mudarGrupo();'><option value='" + todasTropas + "'>Todos</option></select></td>" +
     "<td><select id='tipoComandoSSP' style='padding: 2px 4px;'><option value='support' selected>Apoiar</option><option value='attack'>Atacar</option></select></td>" +
     "<td onclick=\"mudarSeta(); if($('#escolher_tropas').is(':visible')){ $('#escolher_tropas').hide();$('#lista_tropas').show(); guardarSelecao(); return;} else { $('#lista_tropas').hide(); $('#escolher_tropas').show(); }\" style='cursor:pointer;'><span id='icone_seta' class='icon header arr_down'></span></td>" +
@@ -1293,7 +1305,16 @@ function desenharPlanner(tempoAtual) {
     dataCorreta(this, '.');
   });
   $(document).off('change', '#hora_input').on('change', '#hora_input', function() {
-    dataCorreta(this, ':');
+    var x = this.value.match(/\d+/g);
+    if (x && x.length >= 4) {
+      $("#ms_input").val(x[3].slice(0, 3));
+      this.value = x[0] + ":" + x[1] + ":" + x[2];
+    } else {
+      dataCorreta(this, ':');
+    }
+  });
+  $(document).off('input change', '#ms_input').on('input change', '#ms_input', function() {
+    this.value = this.value.replace(/\D/g, '').slice(0, 3);
   });
   $(document).off('change', '#objetivoCommun').on('change', '#objetivoCommun', function() {
     mostrarDistancia();
@@ -1454,4 +1475,4 @@ window.calibrarPingAutomatico = calibrarPingAutomatico;
 
 // Inicia automaticamente
 iniciarSSP();
-console.log("🎯 SSP v3.9 (Single Screen Planner & Precision Snipe — Duração Exata & Offset Seguro) — Azuelos carregado com sucesso!");
+console.log("🎯 SSP v4.0 (Single Screen Planner & Precision Snipe — Milissegundos Customizáveis & Snipe HUD) — Azuelos carregado com sucesso!");
