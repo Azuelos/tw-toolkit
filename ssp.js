@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Tribal Wars — SSP (Single Screen Planner & Precision Snipe)
-// @version      3.2
-// @description  Planejador de ataques e snipes em tela única com cronômetro de precisão e disparo automático
+// @version      3.8
+// @description  Planejador de ataques e snipes em tela única com cronômetro de precisão, hora de chegada e disparo automático
 // @author       Azuelos
 // @match        https://*.tribalwars.com.br/game.php*
 // @grant        none
@@ -12,7 +12,7 @@
  * Tribal Wars BR / Internacional
  *
  * Repositório: https://github.com/Azuelos/tw-toolkit
- * Versão: 3.2 (Envio Direto para Confirmação + Cronômetro HUD + Disparo Automático)
+ * Versão: 3.8 (Envio Direto para Confirmação + Cronômetro HUD com Hora de Chegada + Disparo Automático + Calibrador de Ping)
  */
 
 var isMobile = (typeof mobile !== 'undefined' && Boolean(mobile)) || (typeof game_data !== 'undefined' && game_data.device === 'mobile');
@@ -68,11 +68,12 @@ function tocarBeep(frequencia, duracao) {
 // -------------------------------------------------------------
 // SALVAR COMANDO DO SSP PARA A TELA DE CONFIRMAÇÃO
 // -------------------------------------------------------------
-function salvarComandoSSP(villageId, targetCoord, launchTimestamp, paramsUrl) {
+function salvarComandoSSP(villageId, targetCoord, launchTimestamp, paramsUrl, arrivalTimestamp) {
   var dados = {
     villageId: villageId,
     targetCoord: targetCoord,
     launchTimestamp: launchTimestamp,
+    arrivalTimestamp: arrivalTimestamp,
     paramsUrl: paramsUrl,
     savedAt: Date.now()
   };
@@ -85,7 +86,7 @@ function salvarComandoSSP(villageId, targetCoord, launchTimestamp, paramsUrl) {
 // -------------------------------------------------------------
 // ENVIO DIRETO PARA A TELA DE CONFIRMAÇÃO (1 CLIQUE)
 // -------------------------------------------------------------
-function enviarDiretoConfirmacao(villageId, targetCoord, launchTimestamp, paramsUrl) {
+function enviarDiretoConfirmacao(villageId, targetCoord, launchTimestamp, paramsUrl, arrivalTimestamp) {
   var tipoComando = ($("#tipoComandoSSP").val()) || "support";
   var tipoNome = (tipoComando === "attack") ? "ataque" : "apoio";
 
@@ -94,7 +95,7 @@ function enviarDiretoConfirmacao(villageId, targetCoord, launchTimestamp, params
   }
 
   // 1. Salva o comando no sessionStorage e localStorage
-  salvarComandoSSP(villageId, targetCoord, launchTimestamp, paramsUrl);
+  salvarComandoSSP(villageId, targetCoord, launchTimestamp, paramsUrl, arrivalTimestamp);
 
   // 2. Busca a Praça de Reunião da aldeia de origem em segundo plano
   var placeUrl = "/game.php?village=" + villageId + "&screen=place";
@@ -192,8 +193,8 @@ function enviarDiretoConfirmacao(villageId, targetCoord, launchTimestamp, params
                   $("#contentContainer").html(newContent.innerHTML);
                 }
 
-                // Renderiza o HUD de precisão imediatamente com o alvo já setado!
-                desenharSnipeHUD(launchTimestamp);
+                // Renderiza o HUD de precisão imediatamente com o alvo e chegada já setados!
+                desenharSnipeHUD(launchTimestamp, arrivalTimestamp);
 
                 if (typeof UI !== 'undefined' && UI.InfoMessage) {
                   UI.InfoMessage("Tela de confirmação pronta! Cronômetro ativo.", 2000, "success");
@@ -427,7 +428,30 @@ function calibrarPingAutomatico(callback) {
   runSample();
 }
 
-function desenharSnipeHUD(targetTimestamp) {
+function extrairHoraChegadaDaTela() {
+  var arrivalText = "";
+  $("table.vis tr").each(function() {
+    var text = $(this).text();
+    if (text.indexOf("Chegada:") !== -1 || text.indexOf("Chegada") !== -1) {
+      var tdVal = $(this).find("td:last").text().trim();
+      if (tdVal && tdVal.indexOf("Chegada") === -1) {
+        var match = tdVal.match(/(\d{1,2}:\d{2}:\d{2})(?:[:.](\d{1,3}))?/);
+        if (match) {
+          var timePart = match[1];
+          var msPart = match[2] || "000";
+          if (msPart.length === 1) msPart += "00";
+          else if (msPart.length === 2) msPart += "0";
+          arrivalText = timePart + "." + msPart;
+        } else {
+          arrivalText = tdVal;
+        }
+      }
+    }
+  });
+  return arrivalText;
+}
+
+function desenharSnipeHUD(targetTimestamp, arrivalTimestamp) {
   if ($("#ssp_snipe_hud").length) {
     $("#ssp_snipe_hud").remove();
     if (snipeInterval) clearInterval(snipeInterval);
@@ -445,7 +469,7 @@ function desenharSnipeHUD(targetTimestamp) {
   }
 
   var hudHtml = "" +
-    "<div id='ssp_snipe_hud' style='margin: 15px auto; max-width: 650px; background: #222a1f; color: #fff; border: 3px solid #7d510f; border-radius: 8px; padding: 12px 18px; box-shadow: 0 4px 15px rgba(0,0,0,0.6); font-family: Verdana, sans-serif; text-align: center; transition: border-color 0.3s;'>" +
+    "<div id='ssp_snipe_hud' style='margin: 15px auto; max-width: 680px; background: #222a1f; color: #fff; border: 3px solid #7d510f; border-radius: 8px; padding: 12px 18px; box-shadow: 0 4px 15px rgba(0,0,0,0.6); font-family: Verdana, sans-serif; text-align: center; transition: border-color 0.3s;'>" +
     "  <div style='display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.15); padding-bottom: 6px; margin-bottom: 10px;'>" +
     "    <span style='font-size: 13px; font-weight: bold; color: #ffcc00;'>🎯 SSP — Cronômetro de Precisão (Snipe / Apoio)</span>" +
     "    <div>" +
@@ -453,14 +477,18 @@ function desenharSnipeHUD(targetTimestamp) {
     "      <button id='ssp_close_hud' type='button' style='font-size: 11px; background: #661111; color: #fff; border: 1px solid #990000; padding: 2px 6px; border-radius: 4px; cursor: pointer;'>✖</button>" +
     "    </div>" +
     "  </div>" +
-    "  <div style='display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; font-size: 12px;'>" +
-    "    <div style='background: rgba(0,0,0,0.3); padding: 8px; border-radius: 5px;'>" +
+    "  <div style='display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px; font-size: 11px;'>" +
+    "    <div style='background: rgba(0,0,0,0.3); padding: 8px 4px; border-radius: 5px;'>" +
     "      <span style='color: #aaa;'>Hora Oficial do Servidor:</span><br>" +
-    "      <strong id='ssp_server_clock' style='font-size: 15px; color: #55ff55;'>--:--:--.---</strong>" +
+    "      <strong id='ssp_server_clock' style='font-size: 14px; color: #55ff55;'>--:--:--.---</strong>" +
     "    </div>" +
-    "    <div style='background: rgba(0,0,0,0.3); padding: 8px; border-radius: 5px;'>" +
+    "    <div style='background: rgba(0,0,0,0.3); padding: 8px 4px; border-radius: 5px;'>" +
     "      <span style='color: #aaa;'>Hora de Disparo Alvo:</span><br>" +
-    "      <strong id='ssp_target_clock' style='font-size: 15px; color: #ffdd44;'>--:--:--.---</strong>" +
+    "      <strong id='ssp_target_clock' style='font-size: 14px; color: #ffdd44;'>--:--:--.---</strong>" +
+    "    </div>" +
+    "    <div style='background: rgba(0,0,0,0.3); padding: 8px 4px; border-radius: 5px;'>" +
+    "      <span style='color: #aaa;'>Hora de Chegada Alvo:</span><br>" +
+    "      <strong id='ssp_arrival_clock' style='font-size: 14px; color: #00ddff;'>--:--:--.---</strong>" +
     "    </div>" +
     "  </div>" +
     "  <div style='background: #111; border: 2px solid #444; border-radius: 6px; padding: 12px; margin-bottom: 10px;'>" +
@@ -532,6 +560,17 @@ function desenharSnipeHUD(targetTimestamp) {
 
   var targetMs = targetTimestamp || Date.now() + 60000;
   $("#ssp_target_clock").text(formatarHoraCompletaMs(targetMs));
+
+  if (arrivalTimestamp) {
+    $("#ssp_arrival_clock").text(formatarHoraCompletaMs(arrivalTimestamp));
+  } else {
+    var screenArrival = extrairHoraChegadaDaTela();
+    if (screenArrival) {
+      $("#ssp_arrival_clock").text(screenArrival);
+    } else {
+      $("#ssp_arrival_clock").text("--:--:--");
+    }
+  }
 
   var lastBeepSec = -1;
 
@@ -672,11 +711,13 @@ function verificarTelaAtual() {
     } catch (e) {}
 
     var targetMs = Date.now() + 30000;
+    var arrivalMs = null;
     if (pendingCmd && pendingCmd.launchTimestamp) {
       targetMs = pendingCmd.launchTimestamp;
+      arrivalMs = pendingCmd.arrivalTimestamp || null;
     }
 
-    desenharSnipeHUD(targetMs);
+    desenharSnipeHUD(targetMs, arrivalMs);
     return true;
   }
 
@@ -926,7 +967,7 @@ function escolherOpcoes() {
       var targetCoordStr = _0x56acf5[0] + "|" + _0x56acf5[1];
 
       // O botão "Enviar" agora submete via POST direto para try=confirm
-      _0x59487e[_0x42d393] = _0x335285[i] + "<td>" + ddd + "</td><td>0</td><td><a class='btn btn-ssp-enviar' href='#' onclick=\"enviarDiretoConfirmacao('" + id[i] + "', '" + targetCoordStr + "', " + launchTs + ", '" + encodeURIComponent(tropa_possiveis) + "'); return false;\">Enviar</a></td></tr>";
+      _0x59487e[_0x42d393] = _0x335285[i] + "<td>" + ddd + "</td><td>0</td><td><a class='btn btn-ssp-enviar' href='#' onclick=\"enviarDiretoConfirmacao('" + id[i] + "', '" + targetCoordStr + "', " + launchTs + ", '" + encodeURIComponent(tropa_possiveis) + "', " + targetArrivalUtc + "); return false;\">Enviar</a></td></tr>";
       tabelaBB[_0x42d393] = "[*]" + info.nomesTropas[_0x5b1439] + "[|] " + ax + "|" + ay + " [|] " + _0x56acf5[0] + "|" + _0x56acf5[1] + " [|] " + ddd + " [|] [url=https://" + document.URL.split('/')[2] + linkHref + "]Enviar\n";
       _0x42d393++;
     } else {
@@ -1408,4 +1449,4 @@ window.calibrarPingAutomatico = calibrarPingAutomatico;
 
 // Inicia automaticamente
 iniciarSSP();
-console.log("🎯 SSP v3.7 (Single Screen Planner & Precision Snipe — Calibrador de Ping Integrado) — Azuelos carregado com sucesso!");
+console.log("🎯 SSP v3.8 (Single Screen Planner & Precision Snipe — Hora de Chegada & Calibrador de Ping) — Azuelos carregado com sucesso!");
