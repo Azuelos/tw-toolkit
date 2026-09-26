@@ -1,3 +1,7 @@
 .DS_Store
 *.zip
 tw_page_saved/
+
+# Código-fonte privado
+*.src.js
+build-*.js
