@@ -1638,37 +1638,47 @@ function desenharPlanner(tempoAtual) {
 
     var attacksPills = "";
     if (tremInfo.snipeLimpeza) {
-      attacksPills += "<span style='background: rgba(255,80,80,0.2); border: 1px solid #ff5555; padding: 2px 7px; border-radius: 4px; font-size: 11px;'>⚔️ Limpeza: <strong style='color:#ff8888;'>" + tremInfo.snipeLimpeza.limpeza.horaStr + "." + tremInfo.snipeLimpeza.limpeza.msStr + "</strong></span> ";
+      attacksPills += "<span style='background: rgba(230,57,70,0.25); border: 1px solid #e63946; color: #ffccd5; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 500;'>⚔️ Limpeza: <strong style='color:#ff4d6d;'>" + tremInfo.snipeLimpeza.limpeza.horaStr + "." + tremInfo.snipeLimpeza.limpeza.msStr + "</strong></span> ";
     }
     tremInfo.trem.forEach(function(atk, idx) {
-      var isTargetNobre = (idx === 0 || idx === 1);
-      var borderCol = idx === 0 ? "#ffcc00" : (idx === 1 ? "#55ffcc" : "#666");
-      var bgCol = idx === 0 ? "rgba(255,200,0,0.2)" : (idx === 1 ? "rgba(0,255,200,0.2)" : "rgba(255,255,255,0.06)");
-      attacksPills += "<span style='background: " + bgCol + "; border: 1px solid " + borderCol + "; padding: 2px 7px; border-radius: 4px; font-size: 11px;'>" +
-        (idx === 0 ? "👑 <strong>1º Nobre:</strong> " : "👑 " + (idx + 1) + "º: ") +
-        "<strong style='color:" + (idx === 0 ? "#ffdd44" : (idx === 1 ? "#77ffdd" : "#fff")) + ";'>" + atk.horaStr + "." + atk.msStr + "</strong></span> ";
+      var isFirst = (idx === 0);
+      var isSecond = (idx === 1);
+      var borderCol = isFirst ? "#ffd166" : (isSecond ? "#06d6a0" : "#4a5568");
+      var bgCol = isFirst ? "rgba(255,209,102,0.2)" : (isSecond ? "rgba(6,214,160,0.2)" : "rgba(255,255,255,0.08)");
+      var textCol = isFirst ? "#ffe8a1" : (isSecond ? "#a7f3d0" : "#cbd5e1");
+      var boldCol = isFirst ? "#ffd166" : (isSecond ? "#34d399" : "#ffffff");
+      
+      attacksPills += "<span style='background: " + bgCol + "; border: 1px solid " + borderCol + "; color: " + textCol + "; padding: 3px 8px; border-radius: 4px; font-size: 11px;'>" +
+        (isFirst ? "👑 <strong>1º Nobre:</strong> " : "👑 " + (idx + 1) + "º: ") +
+        "<strong style='color:" + boldCol + ";'>" + atk.horaStr + "." + atk.msStr + "</strong></span> ";
     });
 
-    ntBannerHtml = "<div id='ssp_nt_detector_box' style='margin: 8px 0; padding: 12px 16px; background: linear-gradient(135deg, rgba(15,30,60,0.95), rgba(10,20,40,0.98)); border: 2px solid #2299ff; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,120,255,0.3); text-align: left;'>" +
-      "<div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px;'>" +
-      "  <strong style='color: #66ccff; font-size: 14px;'>🎯 TREM DE NOBRES IDENTIFICADO COM SUCESSO!</strong>" +
-      "  <span style='font-size: 11px; background: #0066cc; color: #fff; padding: 3px 10px; border-radius: 4px; font-weight: bold;'>" + tremInfo.trem.length + " Nobres (Gap: " + sp.gapMs + "ms)</span>" +
+    ntBannerHtml = "<div id='ssp_nt_detector_box' style='margin: 8px 0; padding: 14px 18px; background: linear-gradient(135deg, #0d1b2a, #1b263b); border: 2px solid #00b4d8; border-radius: 8px; box-shadow: 0 6px 25px rgba(0,180,216,0.3); text-align: left; color: #ffffff !important; font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif;'>" +
+      "<div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.15); padding-bottom: 8px;'>" +
+      "  <strong style='color: #48cae4; font-size: 15px; letter-spacing: 0.5px;'>🎯 TREM DE NOBRES IDENTIFICADO COM SUCESSO!</strong>" +
+      "  <span style='font-size: 12px; background: #0077b6; color: #ffffff; padding: 3px 10px; border-radius: 4px; font-weight: bold;'>4 Nobres (Gap: " + sp.gapMs + "ms)</span>" +
       "</div>" +
-      "<div style='margin-bottom: 10px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center;'>" + attacksPills + "</div>" +
-      "<div style='background: rgba(0,0,0,0.35); padding: 8px 12px; border-radius: 5px; margin-bottom: 10px; font-size: 12px; line-height: 1.5; border-left: 4px solid #00ff88;'>" +
-      "  🛡️ <strong>Janela de Interceptação:</strong> <span style='color:#55ff55; font-weight:bold;'>" + sp.nobre1.horaStr + "." + String(sp.nobre1.ms + 1).padStart(3, '0') + "</span> até <span style='color:#55ff55; font-weight:bold;'>" + sp.nobre2.horaStr + "." + String(sp.nobre2.ms - 1).padStart(3, '0') + "</span> (Mata Nobres 2, 3 e 4!)<br>" +
-      "  ⚡ <strong>Alvo Matemático Exato:</strong> <strong style='color:#00ffff; font-size:16px; font-family: monospace; letter-spacing: 1px;'>" + sp.horaStr + "." + sp.msStr + "</strong> (Ponto Médio, margem ±" + sp.tolerancia + "ms)" +
+      "<div style='margin-bottom: 12px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;'>" + attacksPills + "</div>" +
+      "<div style='background: rgba(0,0,0,0.55); padding: 12px 16px; border-radius: 6px; margin-bottom: 12px; font-size: 13px; line-height: 1.7; border-left: 4px solid #06d6a0; color: #ffffff !important;'>" +
+      "  <span style='color: #e2e8f0;'>🛡️ <strong style='color: #ffffff;'>Janela de Interceptação:</strong></span> " +
+      "  <span style='color: #06d6a0; font-weight: bold; font-size: 14px; font-family: monospace;'>" + sp.nobre1.horaStr + "." + String(sp.nobre1.ms + 1).padStart(3, '0') + "</span> " +
+      "  <span style='color: #94a3b8;'>até</span> " +
+      "  <span style='color: #06d6a0; font-weight: bold; font-size: 14px; font-family: monospace;'>" + sp.nobre2.horaStr + "." + String(sp.nobre2.ms - 1).padStart(3, '0') + "</span> " +
+      "  <span style='color: #64748b; font-size: 12px;'> (Mata Nobres 2, 3 e 4!)</span><br>" +
+      "  <span style='color: #e2e8f0;'>⚡ <strong style='color: #ffffff;'>Alvo Matemático Exato:</strong></span> " +
+      "  <strong style='color: #00f0ff; font-size: 17px; font-family: monospace; letter-spacing: 1px; text-shadow: 0 0 10px rgba(0,240,255,0.4);'>" + sp.horaStr + "." + sp.msStr + "</strong> " +
+      "  <span style='color: #ffd166; font-size: 12px; font-weight: 600;'> (Ponto Médio, margem ±" + sp.tolerancia + "ms)</span>" +
       "</div>" +
-      "<div style='display: flex; gap: 8px; flex-wrap: wrap; align-items: center;'>" +
-      "  <button type='button' class='btn' id='ssp_btn_snipe_nt_primary' style='background: #009944; color: #fff; font-weight: bold; font-size: 13px; border: 1px solid #00cc55; padding: 6px 16px; border-radius: 5px; cursor: pointer; box-shadow: 0 0 10px rgba(0,255,100,0.25);'>" +
+      "<div style='display: flex; gap: 10px; flex-wrap: wrap; align-items: center;'>" +
+      "  <button type='button' class='btn' id='ssp_btn_snipe_nt_primary' style='background: linear-gradient(180deg, #00b050, #007733); color: #ffffff !important; font-weight: bold; font-size: 13px; text-shadow: 0 1px 2px rgba(0,0,0,0.6); padding: 8px 18px; border: 1px solid #00ff77; border-radius: 5px; cursor: pointer; box-shadow: 0 0 12px rgba(0,255,100,0.3);'>" +
       "    🎯 ENCAIXAR ENTRE NOBRE 1 E 2 (" + sp.horaStr + "." + sp.msStr + ")" +
       "  </button>" +
       (tremInfo.snipeSecundario ?
-        "  <button type='button' class='btn' id='ssp_btn_snipe_nt_secondary' style='background: #2a4060; color: #aaddff; font-size: 11px; border: 1px solid #446699; padding: 6px 12px; border-radius: 5px; cursor: pointer;'>" +
+        "  <button type='button' class='btn' id='ssp_btn_snipe_nt_secondary' style='background: linear-gradient(180deg, #2b4c7e, #1a365d); color: #ffffff !important; font-weight: bold; font-size: 12px; padding: 8px 14px; border: 1px solid #4a7bb0; border-radius: 5px; cursor: pointer;'>" +
         "    🛡️ Entre Nobre 2 e 3 (" + tremInfo.snipeSecundario.horaStr + "." + tremInfo.snipeSecundario.msStr + ")" +
         "  </button>" : "") +
       (tremInfo.snipeLimpeza ?
-        "  <button type='button' class='btn' id='ssp_btn_snipe_nt_limpeza' style='background: #3c2525; color: #ffaaaa; font-size: 11px; border: 1px solid #663333; padding: 6px 10px; border-radius: 5px; cursor: pointer;'>" +
+        "  <button type='button' class='btn' id='ssp_btn_snipe_nt_limpeza' style='background: linear-gradient(180deg, #4a2828, #2e1818); color: #ffcccc !important; font-size: 12px; padding: 8px 12px; border: 1px solid #7d4444; border-radius: 5px; cursor: pointer;'>" +
         "    ⚔️ Entre Limpeza e Nobre 1 (" + tremInfo.snipeLimpeza.horaStr + "." + tremInfo.snipeLimpeza.msStr + ")" +
         "  </button>" : "") +
       "</div>" +
