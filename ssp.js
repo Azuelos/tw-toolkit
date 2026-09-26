@@ -849,6 +849,30 @@ function desenharSnipeHUD(targetTimestamp, arrivalTimestamp) {
 
   var lastBeepSec = -1;
 
+  var socketPreWarmed = false;
+  function preAquecerSocketECalibrarTempoReal() {
+    socketPreWarmed = true;
+    var vId = (typeof game_data !== 'undefined' && game_data.village && game_data.village.id) ? game_data.village.id : "";
+    var t0 = performance.now();
+    var xhr = new XMLHttpRequest();
+    xhr.open("GET", "/game.php?village=" + vId + "&ajax=ping_test&_warm=" + Date.now(), true);
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState === 4) {
+        var freshRtt = performance.now() - t0;
+        if (freshRtt > 5 && freshRtt < 1000) {
+          var freshOffset = Math.max(10, Math.round(freshRtt / 2) + 8);
+          var curOffset = Number($("#ssp_offset_ms").val()) || 0;
+          if (Math.abs(freshOffset - curOffset) >= 6) {
+            $("#ssp_offset_ms").val(freshOffset);
+            $("#ssp_ping_feedback").css("color", "#55ff55").text("⚡ Socket quente: RTT " + Math.round(freshRtt) + "ms | Offset ajustado: " + freshOffset + "ms");
+          }
+        }
+      }
+    };
+    xhr.send(null);
+  }
+
+
   function dispararComando() {
     if (disparado) return;
     disparado = true;
@@ -929,6 +953,11 @@ function desenharSnipeHUD(targetTimestamp, arrivalTimestamp) {
       var strMin = min < 10 ? '0' + min : '' + min;
 
       displayEl.text(strMin + ':' + strSec + '.' + strMs);
+
+      // Pré-aquecimento do Socket TCP/TLS e calibração dinâmica de ping em tempo real (T - 3.5s)
+      if (diffMs <= 3500 && diffMs > 1500 && !socketPreWarmed) {
+        preAquecerSocketECalibrarTempoReal();
+      }
 
       // Bips de áudio nos últimos 3 segundos
       if (totalSec <= 3 && totalSec !== lastBeepSec) {
