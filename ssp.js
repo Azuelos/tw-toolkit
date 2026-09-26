@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Tribal Wars — SSP (Single Screen Planner & Precision Snipe)
-// @version      4.3
+// @version      4.5
 // @description  Planejador de ataques e snipes em tela única com precisão absoluta, sincronização em tempo real da duração oficial e suporte a milissegundos
 // @author       Azuelos
 // @match        https://*.tribalwars.com.br/game.php*
@@ -12,7 +12,7 @@
  * Tribal Wars BR / Internacional
  *
  * Repositório: https://github.com/Azuelos/tw-toolkit
- * Versão: 4.3 (Sincronização em Tempo Real com a Duração Oficial do Servidor TW)
+ * Versão: 4.5 (Snipe Anti-Nobre Inteligente: Detector de NT, Sweet-Spot & Compensação One-Way)
  */
 
 var isMobile = (typeof mobile !== 'undefined' && Boolean(mobile)) || (typeof game_data !== 'undefined' && game_data.device === 'mobile');
@@ -408,6 +408,151 @@ function formatarHoraCompletaMs(timestamp) {
   return strH + ':' + strM + ':' + strS + '.' + strMs;
 }
 
+
+// -------------------------------------------------------------
+// DETECTOR AUTOMÁTICO DE ATAQUES E TREM DE NOBRES (ANTI-SNIPE)
+// -------------------------------------------------------------
+function detectarAtaquesRecebidosETremNobres() {
+  var ataques = [];
+
+  $("table.vis").each(function() {
+    var tbl = $(this);
+    var headText = tbl.find("th").text();
+    // Identifica tabelas de ataques a chegar (#show_incoming_units, #commands_incomings, etc.)
+    if (headText.indexOf("Chegada") === -1 && headText.indexOf("Chegando") === -1 && headText.indexOf("Comandos a chegar") === -1) {
+      return;
+    }
+
+    tbl.find("tr").each(function() {
+      var tr = $(this);
+      if (tr.find("th").length > 0) return;
+      var tdTexto = tr.text();
+      // Formatos aceitos: "hoje às 15:17:04:532", "amanhã às 15:17:05:132", "em 26.09. às 15:17:05.132", "15:17:05:132"
+      var matchHora = tdTexto.match(/(?:hoje|amanhã|\d{1,2}\.\d{1,2}\.?)?\s*às\s*(\d{1,2}):(\d{2}):(\d{2})(?:[:.](\d{1,3}))?/i) ||
+                      tdTexto.match(/(\d{1,2}):(\d{2}):(\d{2})[:.](\d{1,3})/);
+      if (!matchHora) return;
+
+      var hr = parseInt(matchHora[1], 10);
+      var min = parseInt(matchHora[2], 10);
+      var sec = parseInt(matchHora[3], 10);
+      var ms = matchHora[4] ? parseInt(matchHora[4], 10) : 0;
+      if (matchHora[4] && matchHora[4].length === 1) ms *= 100;
+      else if (matchHora[4] && matchHora[4].length === 2) ms *= 10;
+
+      var dataObj = new Date();
+      var serverDateText = $("#serverDate").text();
+      if (serverDateText) {
+        var dp = serverDateText.match(/\d+/g);
+        if (dp && dp.length >= 3) {
+          dataObj = new Date(parseInt(dp[2], 10), parseInt(dp[1], 10) - 1, parseInt(dp[0], 10));
+        }
+      }
+      if (tdTexto.indexOf("amanhã") !== -1) {
+        dataObj.setDate(dataObj.getDate() + 1);
+      } else {
+        var dateMatch = tdTexto.match(/(\d{1,2})\.(\d{1,2})\./);
+        if (dateMatch) {
+          dataObj.setDate(parseInt(dateMatch[1], 10));
+          dataObj.setMonth(parseInt(dateMatch[2], 10) - 1);
+        }
+      }
+
+      var cmdName = tr.find("td:first").text().trim().replace(/\s+/g, ' ');
+      var sOffset = (typeof window.server_utc_diff !== 'undefined') ? (window.server_utc_diff * 1000) : (sspClockSync.offsetFusoMs || -10800000);
+      var arrivalUtc = Date.UTC(dataObj.getFullYear(), dataObj.getMonth(), dataObj.getDate(), hr, min, sec, ms) - sOffset;
+
+      var horaFormatada = String(hr).padStart(2, '0') + ':' + String(min).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
+      var dataFormatada = String(dataObj.getDate()).padStart(2, '0') + '.' + String(dataObj.getMonth() + 1).padStart(2, '0') + '.' + dataObj.getFullYear();
+
+      ataques.push({
+        nome: cmdName,
+        horaStr: horaFormatada,
+        dataStr: dataFormatada,
+        ms: ms,
+        msStr: String(ms).padStart(3, '0'),
+        arrivalUtc: arrivalUtc,
+        hr: hr,
+        min: min,
+        sec: sec
+      });
+    });
+  });
+
+  if (ataques.length === 0) return null;
+
+  // Ordena por chegada cronológica
+  ataques.sort(function(a, b) { return a.arrivalUtc - b.arrivalUtc; });
+
+  // Agrupa sequências de ataques com intervalo <= 500ms (Trem de Nobres / NT)
+  var trains = [];
+  var currentTrain = [];
+  for (var i = 0; i < ataques.length; i++) {
+    if (currentTrain.length === 0) {
+      currentTrain.push(ataques[i]);
+    } else {
+      var prev = currentTrain[currentTrain.length - 1];
+      var diff = ataques[i].arrivalUtc - prev.arrivalUtc;
+      if (diff > 0 && diff <= 500) {
+        currentTrain.push(ataques[i]);
+      } else {
+        if (currentTrain.length >= 2) trains.push(currentTrain);
+        currentTrain = [ataques[i]];
+      }
+    }
+  }
+  if (currentTrain.length >= 2) trains.push(currentTrain);
+
+  var train = trains.length > 0 ? trains[0] : null;
+
+  var resultado = {
+    todosAtaques: ataques,
+    temTrem: Boolean(train && train.length >= 2),
+    trem: train
+  };
+
+  if (train && train.length >= 2) {
+    var n1 = train[0];
+    var n2 = train[1];
+    var gapMs1 = n2.arrivalUtc - n1.arrivalUtc;
+    var targetUtc1 = Math.round(n1.arrivalUtc + gapMs1 / 2);
+    var midMs1 = targetUtc1 % 1000;
+
+    resultado.snipePrincipal = {
+      nobre1: n1,
+      nobre2: n2,
+      gapMs: gapMs1,
+      targetUtc: targetUtc1,
+      dataStr: n1.dataStr,
+      horaStr: n1.horaStr,
+      ms: midMs1,
+      msStr: String(midMs1).padStart(3, '0'),
+      tolerancia: Math.floor(gapMs1 / 2) - 1,
+      descricao: "Entre 1º e 2º Nobre (" + n1.horaStr + "." + n1.msStr + " a " + n2.horaStr + "." + n2.msStr + ")"
+    };
+
+    if (train.length >= 3) {
+      var n3 = train[2];
+      var gapMs2 = n3.arrivalUtc - n2.arrivalUtc;
+      var targetUtc2 = Math.round(n2.arrivalUtc + gapMs2 / 2);
+      var midMs2 = targetUtc2 % 1000;
+      resultado.snipeSecundario = {
+        nobre1: n2,
+        nobre2: n3,
+        gapMs: gapMs2,
+        targetUtc: targetUtc2,
+        dataStr: n2.dataStr,
+        horaStr: n2.horaStr,
+        ms: midMs2,
+        msStr: String(midMs2).padStart(3, '0'),
+        tolerancia: Math.floor(gapMs2 / 2) - 1,
+        descricao: "Entre 2º e 3º Nobre (" + n2.horaStr + "." + n2.msStr + " a " + n3.horaStr + "." + n3.msStr + ")"
+      };
+    }
+  }
+
+  return resultado;
+}
+
 // -------------------------------------------------------------
 // CALIBRADOR AUTOMÁTICO DE PING E LATÊNCIA
 // -------------------------------------------------------------
@@ -426,12 +571,15 @@ function calibrarPingAutomatico(callback) {
     var twLatency = Timing.latency.getAverageLatency();
     if (twLatency && twLatency > 0) {
       var pingVal = Math.round(twLatency);
+      var oneWay = Math.max(10, Math.round(pingVal / 2) + 8);
+      $("#ssp_offset_ms").val(oneWay);
+      try { localStorage.setItem("ssp_calibrated_offset", oneWay); } catch (e) {}
       if (btnCalibrar.length) btnCalibrar.prop("disabled", false).text("⚡ Medir Ping");
-      if (feedbackEl.length) feedbackEl.css("color", "#55ff55").text("Ping nativo TW: " + pingVal + "ms");
+      if (feedbackEl.length) feedbackEl.css("color", "#55ff55").text("RTT: " + pingVal + "ms | Offset: " + oneWay + "ms");
       if (typeof UI !== 'undefined' && UI.InfoMessage) {
-        UI.InfoMessage("Ping oficial do servidor TW: " + pingVal + "ms.", 3000, "info");
+        UI.InfoMessage("Ping oficial TW (RTT): " + pingVal + "ms ➔ Compensação ajustada para " + oneWay + "ms (ida ao servidor).", 3500, "info");
       }
-      if (callback) callback(0, pingVal);
+      if (callback) callback(oneWay, pingVal);
       return;
     }
   }
@@ -496,16 +644,19 @@ function calibrarPingAutomatico(callback) {
     }
     var avgRtt = sum / samples.length;
 
-    // Apenas informa a latência medida sem forçar antecipação que possa cair no segundo anterior
+    var oneWay = Math.max(10, Math.round(avgRtt / 2) + 8);
+    $("#ssp_offset_ms").val(oneWay);
+    try { localStorage.setItem("ssp_calibrated_offset", oneWay); } catch (e) {}
+
     if (feedbackEl.length) {
-      feedbackEl.css("color", "#55ff55").text("Ping medido: " + Math.round(avgRtt) + "ms");
+      feedbackEl.css("color", "#55ff55").text("RTT: " + Math.round(avgRtt) + "ms | Offset: " + oneWay + "ms");
     }
 
     if (typeof UI !== 'undefined' && UI.InfoMessage) {
-      UI.InfoMessage("Ping medido: " + Math.round(avgRtt) + "ms. Compensação mantida em 0ms por segurança.", 4000, "info");
+      UI.InfoMessage("Ping RTT: " + Math.round(avgRtt) + "ms ➔ Compensação de " + oneWay + "ms aplicada!", 4000, "info");
     }
 
-    if (callback) callback(0, avgRtt);
+    if (callback) callback(oneWay, avgRtt);
   }
 
   runSample();
@@ -630,14 +781,27 @@ function desenharSnipeHUD(targetTimestamp, arrivalTimestamp) {
     $("#content_value").prepend(hudHtml);
   }
 
-  // Por segurança e precisão total, inicia sempre em 0ms
-  $("#ssp_offset_ms").val(0);
-  try { localStorage.removeItem("ssp_calibrated_ping"); } catch (e) {}
+  // Baseline recomendada de compensação para entrega pontual no servidor (one-way latency)
+  var defaultOffset = 35;
+  try {
+    var savedOffset = localStorage.getItem("ssp_calibrated_offset");
+    if (savedOffset !== null && savedOffset !== "") {
+      defaultOffset = Number(savedOffset);
+    } else if (typeof Timing !== 'undefined' && Timing.latency && typeof Timing.latency.getAverageLatency === 'function') {
+      var twLat = Timing.latency.getAverageLatency();
+      if (twLat && twLat > 0) {
+        defaultOffset = Math.max(10, Math.round(twLat / 2) + 8);
+      }
+    }
+  } catch (e) {}
+
+  $("#ssp_offset_ms").val(defaultOffset);
+  $("#ssp_ping_feedback").css("color", "#55ff55").text("Offset: " + defaultOffset + "ms (Ida ao Servidor)");
 
   $("#ssp_reset_offset").on("click", function() {
     $("#ssp_offset_ms").val(0);
-    try { localStorage.removeItem("ssp_calibrated_ping"); } catch (e) {}
-    $("#ssp_ping_feedback").css("color", "#aaaaaa").text("✓ 0ms (Sem antecipação)");
+    try { localStorage.setItem("ssp_calibrated_offset", 0); } catch (e) {}
+    $("#ssp_ping_feedback").css("color", "#aaaaaa").text("0ms (Sem compensação)");
   });
 
   $("#ssp_calibrate_ping").on("click", function() {
@@ -711,16 +875,11 @@ function desenharSnipeHUD(targetTimestamp, arrivalTimestamp) {
     var nowMs = obterTempoServidorMs();
     var offsetMs = Number($("#ssp_offset_ms").val()) || 0;
     var triggerAt = targetMs - offsetMs;
-    // Trava de segurança absoluta: nunca permite que o triggerAt recue para o segundo anterior ao alvo
-    var targetSec = Math.floor(targetMs / 1000);
+    // A trava de segundo fechado só se aplica quando o alvo é exatamente .000 e sem compensação.
+    // Em snipes de precisão milimétrica (ms > 0), o disparo deve respeitar rigorosamente a linha do tempo!
     var isSegundoFechado = (targetMs % 1000 === 0);
-
     if (isSegundoFechado && offsetMs === 0) {
-      // Para segundo fechado e 0ms de compensação, o disparo ocorre milimetricamente a +25ms do segundo alvo,
-      // garantindo que NUNCA antecipe no segundo anterior mesmo se a latência for ultra-baixa.
-      triggerAt = targetSec * 1000 + 25;
-    } else if (Math.floor(triggerAt / 1000) < targetSec) {
-      triggerAt = targetSec * 1000;
+      triggerAt = targetMs + 25;
     }
     var remaining = triggerAt - nowMs;
 
@@ -752,13 +911,9 @@ function desenharSnipeHUD(targetTimestamp, arrivalTimestamp) {
 
     var offsetMs = Number($("#ssp_offset_ms").val()) || 0;
     var triggerAt = targetMs - offsetMs;
-    var targetSec = Math.floor(targetMs / 1000);
     var isSegundoFechado = (targetMs % 1000 === 0);
-
     if (isSegundoFechado && offsetMs === 0) {
-      triggerAt = targetSec * 1000 + 25;
-    } else if (Math.floor(triggerAt / 1000) < targetSec) {
-      triggerAt = targetSec * 1000;
+      triggerAt = targetMs + 25;
     }
     var diffMs = Math.round(triggerAt - nowMs);
     var displayEl = $("#ssp_countdown_display");
@@ -1394,26 +1549,53 @@ function desenharPlanner(tempoAtual) {
     }
   }
 
-  var achouComando = false;
-  if ($(".no_ignored_command").length) {
-    $(".no_ignored_command").each(function() {
-      if ($(this).html().match("snob.png") && !achouComando) {
-        var tempo_de_entrada = $(this).find("td:eq(2)").text().match(/\d+/g);
-        if (tempo_de_entrada && tempo_de_entrada.length >= 3) {
-          tempoAtual.setSeconds(tempoAtual.getSeconds() + Number(tempo_de_entrada[2]) + 60 * Number(tempo_de_entrada[1]) + 3600 * Number(tempo_de_entrada[0]));
-          achouComando = true;
-        }
-      }
-    });
-  }
-
+  var tremInfo = detectarAtaquesRecebidosETremNobres();
   var msInicial = "";
-  if (achouComando && typeof tempo_de_entrada !== 'undefined' && tempo_de_entrada && tempo_de_entrada.length >= 4) {
-    msInicial = tempo_de_entrada[3].slice(0, 3);
+  var ntBannerHtml = "";
+
+  if (tremInfo && tremInfo.temTrem && tremInfo.snipePrincipal) {
+    var sp = tremInfo.snipePrincipal;
+    msInicial = sp.msStr;
+    // Preenche com a hora e data do alvo ideal
+    var pData = sp.dataStr.match(/\d+/g);
+    var pHora = sp.horaStr.match(/\d+/g);
+    if (pData && pHora && pData.length >= 3 && pHora.length >= 3) {
+      tempoAtual = new Date(Number(pData[2]), Number(pData[1]) - 1, Number(pData[0]), Number(pHora[0]), Number(pHora[1]), Number(pHora[2]));
+    }
+
+    ntBannerHtml = "<div id='ssp_nt_detector_box' style='margin: 8px 0; padding: 10px 14px; background: linear-gradient(135deg, rgba(20,40,70,0.9), rgba(15,25,45,0.95)); border: 2px solid #3388ff; border-radius: 6px; box-shadow: 0 4px 15px rgba(0,100,255,0.25); text-align: left;'>" +
+      "<div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;'>" +
+      "  <strong style='color: #66ccff; font-size: 13px;'>🎯 DETECTOR DE TREM DE NOBRES (ANTI-SNIPE ATIVO)</strong>" +
+      "  <span style='font-size: 11px; background: #0055aa; color: #fff; padding: 2px 8px; border-radius: 4px; font-weight: bold;'>" + tremInfo.trem.length + " Ataques em Sequência (" + sp.gapMs + "ms)</span>" +
+      "</div>" +
+      "<div style='font-size: 12px; color: #ddd; margin-bottom: 8px; line-height: 1.5;'>" +
+      "  ⚔️ <strong>1º Nobre:</strong> <span style='color:#ffcc00; font-weight:bold;'>" + sp.nobre1.horaStr + "." + sp.nobre1.msStr + "</span> &nbsp;|&nbsp; " +
+      "  👑 <strong>2º Nobre:</strong> <span style='color:#ff9999; font-weight:bold;'>" + sp.nobre2.horaStr + "." + sp.nobre2.msStr + "</span><br>" +
+      "  🛡️ <strong>Janela de Interceptação:</strong> <span style='color:#55ff55; font-weight:bold;'>" + sp.nobre1.horaStr + "." + String(sp.nobre1.ms + 1).padStart(3, '0') + "</span> até <span style='color:#55ff55; font-weight:bold;'>" + sp.nobre2.horaStr + "." + String(sp.nobre2.ms - 1).padStart(3, '0') + "</span> (Mata Nobres 2, 3 e 4!)<br>" +
+      "  ⚡ <strong>Alvo Matemático Exato:</strong> <strong style='color:#00ffff; font-size:13px;'>" + sp.horaStr + "." + sp.msStr + "</strong> (Ponto médio, margem ±" + sp.tolerancia + "ms)" +
+      "</div>" +
+      "<div style='display: flex; gap: 8px; flex-wrap: wrap;'>" +
+      "  <button type='button' class='btn' id='ssp_btn_snipe_nt_primary' style='background: #008844; color: #fff; font-weight: bold; border: 1px solid #00bb55; padding: 5px 14px; border-radius: 4px; cursor: pointer;'>" +
+      "    🎯 Aplicar Snipe: Entre Nobre 1 e 2 (" + sp.horaStr + "." + sp.msStr + ")" +
+      "  </button>" +
+      (tremInfo.snipeSecundario ?
+        "  <button type='button' class='btn' id='ssp_btn_snipe_nt_secondary' style='background: #204060; color: #aaddff; border: 1px solid #336699; padding: 5px 12px; border-radius: 4px; cursor: pointer;'>" +
+        "    🛡️ Entre Nobre 2 e 3 (" + tremInfo.snipeSecundario.horaStr + "." + tremInfo.snipeSecundario.msStr + ")" +
+        "  </button>" : "") +
+      "</div>" +
+      "</div>";
+  } else if (tremInfo && tremInfo.todosAtaques.length > 0) {
+    var pAtk = tremInfo.todosAtaques[0];
+    msInicial = pAtk.msStr;
+    var pData = pAtk.dataStr.match(/\d+/g);
+    var pHora = pAtk.horaStr.match(/\d+/g);
+    if (pData && pHora && pData.length >= 3 && pHora.length >= 3) {
+      tempoAtual = new Date(Number(pData[2]), Number(pData[1]) - 1, Number(pData[0]), Number(pHora[0]), Number(pHora[1]), Number(pHora[2]));
+    }
   }
 
   var ib = typeof image_base !== 'undefined' ? image_base : '';
-  var html = "<div class='vis vis_item' align='center' style='overflow: auto; height: 450px;' id='planer_klinow'>" +
+  var html = "<div class='vis vis_item' align='center' style='overflow: auto; height: 450px;' id='planer_klinow'>" + (ntBannerHtml || "") +
     "<table width='100%'><tr><td width='300'>" +
     "<table style='border-spacing: 3px; border-collapse: separate;'>" +
     "<tr><th>Alvo</th><th>Data</th><th>Hora</th><th>Ms</th><th>Grupo</th><th>Tipo</th><th></th><th></th><th>Autor</th></tr>" +
@@ -1445,6 +1627,36 @@ function desenharPlanner(tempoAtual) {
     "</td></tr></table></div>";
 
   $(mobile ? "#mobileContent" : "#contentContainer").prepend(html);
+
+  $(document).off('click', '#ssp_btn_snipe_nt_primary').on('click', '#ssp_btn_snipe_nt_primary', function(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    if (tremInfo && tremInfo.snipePrincipal) {
+      var sp = tremInfo.snipePrincipal;
+      $("#data_input").val(sp.dataStr);
+      $("#hora_input").val(sp.horaStr);
+      $("#ms_input").val(sp.msStr);
+      $("#tipoComandoSSP").val("support");
+      escolherOpcoes();
+      if (typeof UI !== 'undefined' && UI.InfoMessage) {
+        UI.InfoMessage("Snipe configurado entre o 1º e 2º Nobre (" + sp.horaStr + "." + sp.msStr + ")!", 3000, "success");
+      }
+    }
+  });
+
+  $(document).off('click', '#ssp_btn_snipe_nt_secondary').on('click', '#ssp_btn_snipe_nt_secondary', function(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    if (tremInfo && tremInfo.snipeSecundario) {
+      var ss = tremInfo.snipeSecundario;
+      $("#data_input").val(ss.dataStr);
+      $("#hora_input").val(ss.horaStr);
+      $("#ms_input").val(ss.msStr);
+      $("#tipoComandoSSP").val("support");
+      escolherOpcoes();
+      if (typeof UI !== 'undefined' && UI.InfoMessage) {
+        UI.InfoMessage("Snipe configurado entre o 2º e 3º Nobre (" + ss.horaStr + "." + ss.msStr + ")!", 3000, "success");
+      }
+    }
+  });
 
   $(document).off('click', '#przycisk').on('click', '#przycisk', function(e) {
     if (e && e.preventDefault) e.preventDefault();
@@ -1624,4 +1836,4 @@ window.calibrarPingAutomatico = calibrarPingAutomatico;
 
 // Inicia automaticamente
 iniciarSSP();
-console.log("🎯 SSP v4.4 (Single Screen Planner & Precision Snipe — Sincronização Atômica Nativa & Zero Antecipação) — Azuelos carregado com sucesso!");
+console.log("🎯 SSP v4.5 (Single Screen Planner & Precision Snipe — Sincronização Atômica Nativa & Zero Antecipação) — Azuelos carregado com sucesso!");
