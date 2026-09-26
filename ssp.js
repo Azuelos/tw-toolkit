@@ -68,12 +68,13 @@ function tocarBeep(frequencia, duracao) {
 // -------------------------------------------------------------
 // SALVAR COMANDO DO SSP PARA A TELA DE CONFIRMAÇÃO
 // -------------------------------------------------------------
-function salvarComandoSSP(villageId, targetCoord, launchTimestamp, paramsUrl, arrivalTimestamp) {
+function salvarComandoSSP(villageId, targetCoord, launchTimestamp, paramsUrl, arrivalTimestamp, ntDetails) {
   var dados = {
     villageId: villageId,
     targetCoord: targetCoord,
     launchTimestamp: launchTimestamp,
     arrivalTimestamp: arrivalTimestamp,
+    ntDetails: ntDetails || (typeof window !== 'undefined' ? window.sspNtContext : null) || null,
     paramsUrl: paramsUrl,
     savedAt: Date.now()
   };
@@ -86,16 +87,17 @@ function salvarComandoSSP(villageId, targetCoord, launchTimestamp, paramsUrl, ar
 // -------------------------------------------------------------
 // ENVIO DIRETO PARA A TELA DE CONFIRMAÇÃO (1 CLIQUE)
 // -------------------------------------------------------------
-function enviarDiretoConfirmacao(villageId, targetCoord, launchTimestamp, paramsUrl, arrivalTimestamp) {
+function enviarDiretoConfirmacao(villageId, targetCoord, launchTimestamp, paramsUrl, arrivalTimestamp, ntDetails) {
   var tipoComando = ($("#tipoComandoSSP").val()) || "support";
   var tipoNome = (tipoComando === "attack") ? "ataque" : "apoio";
+  var currentNtDetails = ntDetails || (typeof window !== 'undefined' ? window.sspNtContext : null) || null;
 
   if (typeof UI !== 'undefined' && UI.InfoMessage) {
     UI.InfoMessage("Preparando " + tipoNome + " e abrindo tela de confirmação...", 2000, "info");
   }
 
   // 1. Salva o comando no sessionStorage e localStorage
-  salvarComandoSSP(villageId, targetCoord, launchTimestamp, paramsUrl, arrivalTimestamp);
+  salvarComandoSSP(villageId, targetCoord, launchTimestamp, paramsUrl, arrivalTimestamp, currentNtDetails);
 
   // 2. Busca a Praça de Reunião da aldeia de origem em segundo plano
   var placeUrl = "/game.php?village=" + villageId + "&screen=place";
@@ -200,7 +202,7 @@ function enviarDiretoConfirmacao(villageId, targetCoord, launchTimestamp, params
                 }
 
                 // Renderiza o HUD de precisão imediatamente com o alvo e chegada já setados!
-                desenharSnipeHUD(launchTimestamp, arrivalTimestamp);
+                desenharSnipeHUD(launchTimestamp, arrivalTimestamp, currentNtDetails);
 
                 if (typeof UI !== 'undefined' && UI.InfoMessage) {
                   UI.InfoMessage("Tela de confirmação pronta! Cronômetro ativo.", 2000, "success");
@@ -748,7 +750,7 @@ function extrairDuracaoSegundosDaTela() {
   return duracaoSec;
 }
 
-function desenharSnipeHUD(targetTimestamp, arrivalTimestamp) {
+function desenharSnipeHUD(targetTimestamp, arrivalTimestamp, ntDetails) {
   if ($("#ssp_snipe_hud").length) {
     $("#ssp_snipe_hud").remove();
     if (snipeInterval) clearInterval(snipeInterval);
@@ -772,6 +774,25 @@ function desenharSnipeHUD(targetTimestamp, arrivalTimestamp) {
     btnSubmit.focus();
   }
 
+  var isMillisecondSnipe = Boolean((arrivalTimestamp && (arrivalTimestamp % 1000 !== 0)) || (targetTimestamp && (targetTimestamp % 1000 !== 0)) || ntDetails);
+
+  var ntDetailsHtml = "";
+  if (ntDetails && ntDetails.nobre1Str && ntDetails.nobre2Str) {
+    ntDetailsHtml = "" +
+      "<div style='background: rgba(0, 180, 216, 0.15); border: 1px solid #00b4d8; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; font-size: 12px; text-align: left;'>" +
+      "  <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;'>" +
+      "    <strong style='color: #00f0ff; font-size: 13px;'>🎯 ENCAIXE DE NOBRES (ANTI-TREM) ATIVO</strong>" +
+      "    <span style='background: #0077b6; color: #ffffff; font-size: 10px; font-weight: bold; padding: 2px 7px; border-radius: 3px;'>🛡️ TRAVA ANTI-ANTECIPAÇÃO ATIVA</span>" +
+      "  </div>" +
+      "  <div style='color: #cbd5e1; line-height: 1.6;'>" +
+      "    ⚔️ <strong>1º Nobre:</strong> <span style='color: #ffd166; font-family: monospace; font-weight: bold; font-size: 13px;'>" + ntDetails.nobre1Str + "</span> &nbsp;|&nbsp; " +
+      "    👑 <strong>2º Nobre:</strong> <span style='color: #34d399; font-family: monospace; font-weight: bold; font-size: 13px;'>" + ntDetails.nobre2Str + "</span><br>" +
+      "    ⚡ <strong>Alvo do Encaixe:</strong> <strong style='color: #00f0ff; font-family: monospace; font-size: 14px;'>" + (ntDetails.targetStr || formatarHoraCompletaMs(arrivalTimestamp)) + "</strong> " +
+      "    <span style='color: #94a3b8; font-size: 11px;'>(Disparo protegido para pousar estritamente APÓS o 1º Nobre)</span>" +
+      "  </div>" +
+      "</div>";
+  }
+
   var hudHtml = "" +
     "<div id='ssp_snipe_hud' style='margin: 15px auto; max-width: 680px; background: #222a1f; color: #fff; border: 3px solid #7d510f; border-radius: 8px; padding: 12px 18px; box-shadow: 0 4px 15px rgba(0,0,0,0.6); font-family: Verdana, sans-serif; text-align: center; transition: border-color 0.3s;'>" +
     "  <div style='display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.15); padding-bottom: 6px; margin-bottom: 10px;'>" +
@@ -781,6 +802,7 @@ function desenharSnipeHUD(targetTimestamp, arrivalTimestamp) {
     "      <button id='ssp_close_hud' type='button' style='font-size: 11px; background: #661111; color: #fff; border: 1px solid #990000; padding: 2px 6px; border-radius: 4px; cursor: pointer;'>✖</button>" +
     "    </div>" +
     "  </div>" +
+    ntDetailsHtml +
     "  <div style='display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px; font-size: 11px;'>" +
     "    <div style='background: rgba(0,0,0,0.3); padding: 8px 4px; border-radius: 5px;'>" +
     "      <span style='color: #aaa;'>Hora Oficial do Servidor:</span><br>" +
@@ -813,8 +835,8 @@ function desenharSnipeHUD(targetTimestamp, arrivalTimestamp) {
     "    <span id='ssp_ping_feedback' style='font-size: 11px; font-weight: bold;'></span>" +
     "  </div>" +
     "  <div style='font-size: 11px; color: #bbb; line-height: 1.4;'>" +
-    "    💡 <strong>Precisão Milimétrica:</strong> Compensação padrão é <strong>0ms</strong> (garante que nunca dispare no segundo anterior).<br>" +
-    "    ⚡ <strong>Modo Automático:</strong> Marque a caixa de disparo automático para envio no ms exato. Mantenha a aba aberta e visível.<br>" +
+    "    💡 <strong>Precisão Milimétrica:</strong> Compensação padrão é <strong>15ms</strong> em conexão ativa (garante que nunca dispare antes do 1º Nobre).<br>" +
+    "    ⚡ <strong>Modo Automático:</strong> Dispara no milissegundo exato através do timer interno do Tribal Wars. Mantenha a aba aberta.<br>" +
     "    <span style='color: #88cc88;'>O clique humano é 100% seguro contra detecção e mantém a sua conta protegida.</span>" +
     "  </div>" +
     "</div>";
@@ -825,22 +847,17 @@ function desenharSnipeHUD(targetTimestamp, arrivalTimestamp) {
     $("#content_value").prepend(hudHtml);
   }
 
-  // Baseline recomendada de compensação para entrega pontual no servidor (one-way latency)
-  var defaultOffset = 35;
+  // Baseline segura de compensação para entrega em socket quente (keep-alive)
+  var defaultOffset = isMillisecondSnipe ? 15 : 0;
   try {
     var savedOffset = localStorage.getItem("ssp_calibrated_offset");
     if (savedOffset !== null && savedOffset !== "") {
-      defaultOffset = Number(savedOffset);
-    } else if (typeof Timing !== 'undefined' && Timing.latency && typeof Timing.latency.getAverageLatency === 'function') {
-      var twLat = Timing.latency.getAverageLatency();
-      if (twLat && twLat > 0) {
-        defaultOffset = Math.max(10, Math.round(twLat / 2) + 8);
-      }
+      defaultOffset = Math.min(isMillisecondSnipe ? 25 : 100, Math.max(0, Number(savedOffset)));
     }
   } catch (e) {}
 
   $("#ssp_offset_ms").val(defaultOffset);
-  $("#ssp_ping_feedback").css("color", "#55ff55").text("Offset: " + defaultOffset + "ms (Ida ao Servidor)");
+  $("#ssp_ping_feedback").css("color", "#06d6a0").text("Offset: " + defaultOffset + "ms (" + (isMillisecondSnipe ? "Snipe Seguro" : "Padrão") + ")");
 
   $("#ssp_reset_offset").on("click", function() {
     $("#ssp_offset_ms").val(0);
@@ -862,15 +879,21 @@ function desenharSnipeHUD(targetTimestamp, arrivalTimestamp) {
     $(this).text(audioHabilitado ? "🔊 Áudio: ON" : "🔇 Áudio: OFF");
   });
 
-  var autoFireArmed = false;
+  var autoFireArmed = isMillisecondSnipe; // Arma automaticamente se for snipe com milissegundos!
   var disparado = false;
   var rafId = null;
+
+  if (autoFireArmed) {
+    $("#ssp_auto_fire").prop("checked", true);
+    $("#ssp_snipe_hud").css("border-color", "#00f0ff");
+    $("#ssp_status_badge").css({ background: "#0077b6", color: "#ffffff" }).text("⚡ DISPARO AUTOMÁTICO DE PRECISÃO ARMADO");
+  }
 
   $("#ssp_auto_fire").on("change", function() {
     autoFireArmed = $(this).is(":checked");
     if (autoFireArmed) {
-      $("#ssp_snipe_hud").css("border-color", "#ffaa00");
-      $("#ssp_status_badge").css({ background: "#aa5500", color: "#ffffff" }).text("⚡ DISPARO AUTOMÁTICO ARMADO");
+      $("#ssp_snipe_hud").css("border-color", isMillisecondSnipe ? "#00f0ff" : "#ffaa00");
+      $("#ssp_status_badge").css({ background: isMillisecondSnipe ? "#0077b6" : "#aa5500", color: "#ffffff" }).text("⚡ DISPARO AUTOMÁTICO ARMADO");
     } else {
       $("#ssp_snipe_hud").css("border-color", "#7d510f");
       $("#ssp_status_badge").css({ background: "#333333", color: "#aaaaaa" }).text("Modo Manual Selecionado");
@@ -904,18 +927,12 @@ function desenharSnipeHUD(targetTimestamp, arrivalTimestamp) {
       if (xhr.readyState === 4) {
         var freshRtt = performance.now() - t0;
         if (freshRtt > 5 && freshRtt < 1000) {
-          var freshOffset = Math.max(10, Math.round(freshRtt / 2) + 8);
-          var curOffset = Number($("#ssp_offset_ms").val()) || 0;
-          if (Math.abs(freshOffset - curOffset) >= 6) {
-            $("#ssp_offset_ms").val(freshOffset);
-            $("#ssp_ping_feedback").css("color", "#55ff55").text("⚡ Socket quente: RTT " + Math.round(freshRtt) + "ms | Offset ajustado: " + freshOffset + "ms");
-          }
+          $("#ssp_ping_feedback").css("color", "#06d6a0").text("⚡ Socket TCP/TLS quente (RTT " + Math.round(freshRtt) + "ms) | Conexão pronta!");
         }
       }
     };
     xhr.send(null);
   }
-
 
   function dispararComando() {
     if (disparado) return;
@@ -937,18 +954,30 @@ function desenharSnipeHUD(targetTimestamp, arrivalTimestamp) {
     }
   }
 
+  function calcularTriggerAt() {
+    var offsetMs = Number($("#ssp_offset_ms").val()) || 0;
+    if (isMillisecondSnipe) {
+      // Trava de segurança: nunca permite offset maior que 25ms para evitar antecipação
+      offsetMs = Math.min(Math.max(0, offsetMs), 25);
+    }
+    var trig = targetMs - offsetMs;
+    // Trava Absoluta contra antecipação antes do 1º Nobre
+    if (ntDetails && ntDetails.nobre1Utc && realDuration) {
+      var nobre1Launch = ntDetails.nobre1Utc - (realDuration * 1000);
+      trig = Math.max(trig, nobre1Launch + 15);
+    }
+    var isSegundoFechado = (targetMs % 1000 === 0);
+    if (isSegundoFechado && offsetMs === 0) {
+      trig = targetMs + 25;
+    }
+    return trig;
+  }
+
   // Loop de micro-precisão acionado nos últimos 1500ms
   function microLoopPrecision() {
     if (disparado) return;
     var nowMs = obterTempoServidorMs();
-    var offsetMs = Number($("#ssp_offset_ms").val()) || 0;
-    var triggerAt = targetMs - offsetMs;
-    // A trava de segundo fechado só se aplica quando o alvo é exatamente .000 e sem compensação.
-    // Em snipes de precisão milimétrica (ms > 0), o disparo deve respeitar rigorosamente a linha do tempo!
-    var isSegundoFechado = (targetMs % 1000 === 0);
-    if (isSegundoFechado && offsetMs === 0) {
-      triggerAt = targetMs + 25;
-    }
+    var triggerAt = calcularTriggerAt();
     var remaining = triggerAt - nowMs;
 
     if (autoFireArmed) {
@@ -977,12 +1006,7 @@ function desenharSnipeHUD(targetTimestamp, arrivalTimestamp) {
     var nowMs = obterTempoServidorMs();
     $("#ssp_server_clock").text(formatarHoraCompletaMs(nowMs));
 
-    var offsetMs = Number($("#ssp_offset_ms").val()) || 0;
-    var triggerAt = targetMs - offsetMs;
-    var isSegundoFechado = (targetMs % 1000 === 0);
-    if (isSegundoFechado && offsetMs === 0) {
-      triggerAt = targetMs + 25;
-    }
+    var triggerAt = calcularTriggerAt();
     var diffMs = Math.round(triggerAt - nowMs);
     var displayEl = $("#ssp_countdown_display");
     var badgeEl = $("#ssp_status_badge");
@@ -998,7 +1022,7 @@ function desenharSnipeHUD(targetTimestamp, arrivalTimestamp) {
 
       displayEl.text(strMin + ':' + strSec + '.' + strMs);
 
-      // Pré-aquecimento do Socket TCP/TLS e calibração dinâmica de ping em tempo real (T - 3.5s)
+      // Pré-aquecimento do Socket TCP/TLS a T - 3.5s
       if (diffMs <= 3500 && diffMs > 1500 && !socketPreWarmed) {
         preAquecerSocketECalibrarTempoReal();
       }
@@ -1016,51 +1040,28 @@ function desenharSnipeHUD(targetTimestamp, arrivalTimestamp) {
       }
 
       if (diffMs <= 500) {
-        displayEl.css("color", "#ffcc00");
-        badgeEl.css({ background: "#886600", color: "#ffffff" }).text(autoFireArmed ? "⚡ DISPARANDO EM BREVE..." : "⚠️ Prepare o dedo...");
+        displayEl.css("color", "#00f0ff");
+        badgeEl.css({ background: "#0077b6", color: "#ffffff" }).text(autoFireArmed ? "⚡ DISPARANDO EM BREVE..." : "⚠️ Prepare o clique...");
         if (btnSubmit.length) {
           btnSubmit.css({ "box-shadow": "none", "outline": "none" });
         }
       } else if (diffMs <= 2000) {
         displayEl.css("color", "#ffaa00");
-        badgeEl.css({ background: "#aa5500", color: "#ffffff" }).text("⚠️ ATENÇÃO MÁXIMA — Prepare o comando!");
+        badgeEl.css({ background: "#aa5500", color: "#ffffff" }).text("⚠️ ATENÇÃO MÁXIMA — Disparo iminente!");
       } else if (diffMs <= 5000) {
         displayEl.css("color", "#ffee55");
         badgeEl.css({ background: "#665500", color: "#ffffff" }).text("🔔 PREPARE-SE...");
       } else if (!autoFireArmed) {
-        displayEl.css("color", "#ffffff");
-        badgeEl.css({ background: "#333333", color: "#aaaaaa" }).text("Aguardando momento ideal...");
+        badgeEl.css({ background: "#333", color: "#aaa" }).text("Modo Manual Selecionado");
       }
     } else {
-      if (autoFireArmed && !disparado) {
+      if (autoFireArmed) {
         dispararComando();
-        return;
-      }
-      var passMs = Math.abs(diffMs);
-      if (passMs <= 85) {
-        displayEl.css("color", "#00ff00").text("00:00.000");
-        badgeEl.css({ background: "#00aa00", color: "#fff" }).text("🔥 CLIQUE AGORA! (JANELA EXATA)");
-        if (btnSubmit.length) {
-          btnSubmit.css({ "box-shadow": "0 0 20px #00ff00", "outline": "3px solid #00ff00" });
-        }
-        if (lastBeepSec !== 0) {
-          tocarBeep(1100, 140);
-          lastBeepSec = 0;
-        }
-      } else {
-        displayEl.css("color", "#ff4444").text("+" + (passMs / 1000).toFixed(3) + "s");
-        badgeEl.css({ background: "#660000", color: "#fff" }).text("Momento expirado (" + Math.floor(passMs) + "ms atrás)");
-        if (btnSubmit.length) {
-          btnSubmit.css({ "box-shadow": "none", "outline": "none" });
-        }
       }
     }
   }, 25);
 }
 
-// -------------------------------------------------------------
-// VERIFICAÇÃO AUTOMÁTICA DE TELAS AO CLICAR NO QUICKBAR OU USERSCRIPT
-// -------------------------------------------------------------
 function verificarTelaAtual() {
   var isConfirmScreen = location.href.indexOf("try=confirm") !== -1 || $("#troop_confirm_submit").length > 0;
   var isPlaceScreen = location.href.indexOf("screen=place") !== -1;
@@ -1075,9 +1076,11 @@ function verificarTelaAtual() {
 
     var targetMs = Date.now() + 30000;
     var arrivalMs = null;
+    var ntDetails = null;
     if (pendingCmd && pendingCmd.launchTimestamp) {
       targetMs = pendingCmd.launchTimestamp;
       arrivalMs = pendingCmd.arrivalTimestamp || null;
+      ntDetails = pendingCmd.ntDetails || null;
     }
 
     var realDuration = extrairDuracaoSegundosDaTela();
@@ -1085,7 +1088,7 @@ function verificarTelaAtual() {
       targetMs = arrivalMs - (realDuration * 1000);
     }
 
-    desenharSnipeHUD(targetMs, arrivalMs);
+    desenharSnipeHUD(targetMs, arrivalMs, ntDetails);
     return true;
   }
 
@@ -1731,13 +1734,20 @@ function desenharPlanner(tempoAtual) {
     if (e && e.preventDefault) e.preventDefault();
     if (tremInfo && tremInfo.snipePrincipal) {
       var sp = tremInfo.snipePrincipal;
+      window.sspNtContext = {
+        nobre1Utc: sp.nobre1.arrivalUtc,
+        nobre2Utc: sp.nobre2.arrivalUtc,
+        nobre1Str: sp.nobre1.horaStr + "." + sp.nobre1.msStr,
+        nobre2Str: sp.nobre2.horaStr + "." + sp.nobre2.msStr,
+        targetStr: sp.horaStr + "." + sp.msStr
+      };
       $("#data_input").val(sp.dataStr);
       $("#hora_input").val(sp.horaStr);
       $("#ms_input").val(sp.msStr);
       $("#tipoComandoSSP").val("support");
       escolherOpcoes();
       if (typeof UI !== 'undefined' && UI.InfoMessage) {
-        UI.InfoMessage("Snipe configurado entre o 1º e 2º Nobre (" + sp.horaStr + "." + sp.msStr + ")!", 3000, "success");
+        UI.InfoMessage("Snipe configurado: Entre 1º e 2º Nobre (" + sp.horaStr + "." + sp.msStr + ")!", 3000, "success");
       }
     }
   });
@@ -1746,6 +1756,13 @@ function desenharPlanner(tempoAtual) {
     if (e && e.preventDefault) e.preventDefault();
     if (tremInfo && tremInfo.snipeSecundario) {
       var ss = tremInfo.snipeSecundario;
+      window.sspNtContext = {
+        nobre1Utc: ss.nobre1.arrivalUtc,
+        nobre2Utc: ss.nobre2.arrivalUtc,
+        nobre1Str: ss.nobre1.horaStr + "." + ss.nobre1.msStr,
+        nobre2Str: ss.nobre2.horaStr + "." + ss.nobre2.msStr,
+        targetStr: ss.horaStr + "." + ss.msStr
+      };
       $("#data_input").val(ss.dataStr);
       $("#hora_input").val(ss.horaStr);
       $("#ms_input").val(ss.msStr);
@@ -1761,6 +1778,13 @@ function desenharPlanner(tempoAtual) {
     if (e && e.preventDefault) e.preventDefault();
     if (tremInfo && tremInfo.snipeLimpeza) {
       var sl = tremInfo.snipeLimpeza;
+      window.sspNtContext = {
+        nobre1Utc: sl.limpeza.arrivalUtc,
+        nobre2Utc: sl.nobre1.arrivalUtc,
+        nobre1Str: sl.limpeza.horaStr + "." + sl.limpeza.msStr,
+        nobre2Str: sl.nobre1.horaStr + "." + sl.nobre1.msStr,
+        targetStr: sl.horaStr + "." + sl.msStr
+      };
       $("#data_input").val(sl.dataStr);
       $("#hora_input").val(sl.horaStr);
       $("#ms_input").val(sl.msStr);
