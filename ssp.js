@@ -483,7 +483,8 @@ function detectarAtaquesRecebidosETremNobres() {
   // Ordena por chegada cronológica
   ataques.sort(function(a, b) { return a.arrivalUtc - b.arrivalUtc; });
 
-  // Agrupa sequências de ataques com intervalo <= 500ms (Trem de Nobres / NT)
+  // No Tribal Wars (BR143), um Trem de Nobres oficial tem gap estrito de 100ms (ou 200ms em alguns mundos).
+  // Ataques com intervalo > 260ms (como ataques de limpeza ou fakes a 450ms antes) NÃO são nobres do trem!
   var trains = [];
   var currentTrain = [];
   for (var i = 0; i < ataques.length; i++) {
@@ -492,7 +493,8 @@ function detectarAtaquesRecebidosETremNobres() {
     } else {
       var prev = currentTrain[currentTrain.length - 1];
       var diff = ataques[i].arrivalUtc - prev.arrivalUtc;
-      if (diff > 0 && diff <= 500) {
+      // Critério estrito de NT: intervalo consecutivo entre 40ms e 260ms
+      if (diff >= 40 && diff <= 260) {
         currentTrain.push(ataques[i]);
       } else {
         if (currentTrain.length >= 2) trains.push(currentTrain);
@@ -502,6 +504,8 @@ function detectarAtaquesRecebidosETremNobres() {
   }
   if (currentTrain.length >= 2) trains.push(currentTrain);
 
+  // Se houver mais de um trem, escolhe o que tem mais ataques (o NT principal de 4 nobres)
+  trains.sort(function(a, b) { return b.length - a.length; });
   var train = trains.length > 0 ? trains[0] : null;
 
   var resultado = {
@@ -511,7 +515,9 @@ function detectarAtaquesRecebidosETremNobres() {
   };
 
   if (train && train.length >= 2) {
+    // n1 é garantidamente o 1º Nobre real do trem
     var n1 = train[0];
+    // n2 é garantidamente o 2º Nobre real do trem
     var n2 = train[1];
     var gapMs1 = n2.arrivalUtc - n1.arrivalUtc;
     var targetUtc1 = Math.round(n1.arrivalUtc + gapMs1 / 2);
@@ -546,6 +552,44 @@ function detectarAtaquesRecebidosETremNobres() {
         msStr: String(midMs2).padStart(3, '0'),
         tolerancia: Math.floor(gapMs2 / 2) - 1,
         descricao: "Entre 2º e 3º Nobre (" + n2.horaStr + "." + n2.msStr + " a " + n3.horaStr + "." + n3.msStr + ")"
+      };
+    }
+
+    if (train.length >= 4) {
+      var n4 = train[3];
+      var gapMs3 = n4.arrivalUtc - train[2].arrivalUtc;
+      var targetUtc3 = Math.round(train[2].arrivalUtc + gapMs3 / 2);
+      var midMs3 = targetUtc3 % 1000;
+      resultado.snipeTerciario = {
+        nobre1: train[2],
+        nobre2: n4,
+        gapMs: gapMs3,
+        targetUtc: targetUtc3,
+        dataStr: train[2].dataStr,
+        horaStr: train[2].horaStr,
+        ms: midMs3,
+        msStr: String(midMs3).padStart(3, '0'),
+        tolerancia: Math.floor(gapMs3 / 2) - 1,
+        descricao: "Entre 3º e 4º Nobre (" + train[2].horaStr + "." + train[2].msStr + " a " + n4.horaStr + "." + n4.msStr + ")"
+      };
+    }
+
+    // Verifica se há ataque de limpeza anterior ao 1º nobre
+    var idxNobre1 = ataques.indexOf(n1);
+    if (idxNobre1 > 0) {
+      var limpeza = ataques[idxNobre1 - 1];
+      var gapLimp = n1.arrivalUtc - limpeza.arrivalUtc;
+      var targetUtcLimp = Math.round(limpeza.arrivalUtc + gapLimp / 2);
+      resultado.snipeLimpeza = {
+        limpeza: limpeza,
+        nobre1: n1,
+        gapMs: gapLimp,
+        targetUtc: targetUtcLimp,
+        dataStr: limpeza.dataStr,
+        horaStr: limpeza.horaStr,
+        ms: targetUtcLimp % 1000,
+        msStr: String(targetUtcLimp % 1000).padStart(3, '0'),
+        descricao: "Entre Limpeza e 1º Nobre (" + limpeza.horaStr + "." + limpeza.msStr + " a " + n1.horaStr + "." + n1.msStr + ")"
       };
     }
   }
@@ -1592,24 +1636,40 @@ function desenharPlanner(tempoAtual) {
       tempoAtual = new Date(Number(pData[2]), Number(pData[1]) - 1, Number(pData[0]), Number(pHora[0]), Number(pHora[1]), Number(pHora[2]));
     }
 
-    ntBannerHtml = "<div id='ssp_nt_detector_box' style='margin: 8px 0; padding: 10px 14px; background: linear-gradient(135deg, rgba(20,40,70,0.9), rgba(15,25,45,0.95)); border: 2px solid #3388ff; border-radius: 6px; box-shadow: 0 4px 15px rgba(0,100,255,0.25); text-align: left;'>" +
-      "<div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;'>" +
-      "  <strong style='color: #66ccff; font-size: 13px;'>🎯 DETECTOR DE TREM DE NOBRES (ANTI-SNIPE ATIVO)</strong>" +
-      "  <span style='font-size: 11px; background: #0055aa; color: #fff; padding: 2px 8px; border-radius: 4px; font-weight: bold;'>" + tremInfo.trem.length + " Ataques em Sequência (" + sp.gapMs + "ms)</span>" +
+    var attacksPills = "";
+    if (tremInfo.snipeLimpeza) {
+      attacksPills += "<span style='background: rgba(255,80,80,0.2); border: 1px solid #ff5555; padding: 2px 7px; border-radius: 4px; font-size: 11px;'>⚔️ Limpeza: <strong style='color:#ff8888;'>" + tremInfo.snipeLimpeza.limpeza.horaStr + "." + tremInfo.snipeLimpeza.limpeza.msStr + "</strong></span> ";
+    }
+    tremInfo.trem.forEach(function(atk, idx) {
+      var isTargetNobre = (idx === 0 || idx === 1);
+      var borderCol = idx === 0 ? "#ffcc00" : (idx === 1 ? "#55ffcc" : "#666");
+      var bgCol = idx === 0 ? "rgba(255,200,0,0.2)" : (idx === 1 ? "rgba(0,255,200,0.2)" : "rgba(255,255,255,0.06)");
+      attacksPills += "<span style='background: " + bgCol + "; border: 1px solid " + borderCol + "; padding: 2px 7px; border-radius: 4px; font-size: 11px;'>" +
+        (idx === 0 ? "👑 <strong>1º Nobre:</strong> " : "👑 " + (idx + 1) + "º: ") +
+        "<strong style='color:" + (idx === 0 ? "#ffdd44" : (idx === 1 ? "#77ffdd" : "#fff")) + ";'>" + atk.horaStr + "." + atk.msStr + "</strong></span> ";
+    });
+
+    ntBannerHtml = "<div id='ssp_nt_detector_box' style='margin: 8px 0; padding: 12px 16px; background: linear-gradient(135deg, rgba(15,30,60,0.95), rgba(10,20,40,0.98)); border: 2px solid #2299ff; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,120,255,0.3); text-align: left;'>" +
+      "<div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px;'>" +
+      "  <strong style='color: #66ccff; font-size: 14px;'>🎯 TREM DE NOBRES IDENTIFICADO COM SUCESSO!</strong>" +
+      "  <span style='font-size: 11px; background: #0066cc; color: #fff; padding: 3px 10px; border-radius: 4px; font-weight: bold;'>" + tremInfo.trem.length + " Nobres (Gap: " + sp.gapMs + "ms)</span>" +
       "</div>" +
-      "<div style='font-size: 12px; color: #ddd; margin-bottom: 8px; line-height: 1.5;'>" +
-      "  ⚔️ <strong>1º Nobre:</strong> <span style='color:#ffcc00; font-weight:bold;'>" + sp.nobre1.horaStr + "." + sp.nobre1.msStr + "</span> &nbsp;|&nbsp; " +
-      "  👑 <strong>2º Nobre:</strong> <span style='color:#ff9999; font-weight:bold;'>" + sp.nobre2.horaStr + "." + sp.nobre2.msStr + "</span><br>" +
+      "<div style='margin-bottom: 10px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center;'>" + attacksPills + "</div>" +
+      "<div style='background: rgba(0,0,0,0.35); padding: 8px 12px; border-radius: 5px; margin-bottom: 10px; font-size: 12px; line-height: 1.5; border-left: 4px solid #00ff88;'>" +
       "  🛡️ <strong>Janela de Interceptação:</strong> <span style='color:#55ff55; font-weight:bold;'>" + sp.nobre1.horaStr + "." + String(sp.nobre1.ms + 1).padStart(3, '0') + "</span> até <span style='color:#55ff55; font-weight:bold;'>" + sp.nobre2.horaStr + "." + String(sp.nobre2.ms - 1).padStart(3, '0') + "</span> (Mata Nobres 2, 3 e 4!)<br>" +
-      "  ⚡ <strong>Alvo Matemático Exato:</strong> <strong style='color:#00ffff; font-size:13px;'>" + sp.horaStr + "." + sp.msStr + "</strong> (Ponto médio, margem ±" + sp.tolerancia + "ms)" +
+      "  ⚡ <strong>Alvo Matemático Exato:</strong> <strong style='color:#00ffff; font-size:16px; font-family: monospace; letter-spacing: 1px;'>" + sp.horaStr + "." + sp.msStr + "</strong> (Ponto Médio, margem ±" + sp.tolerancia + "ms)" +
       "</div>" +
-      "<div style='display: flex; gap: 8px; flex-wrap: wrap;'>" +
-      "  <button type='button' class='btn' id='ssp_btn_snipe_nt_primary' style='background: #008844; color: #fff; font-weight: bold; border: 1px solid #00bb55; padding: 5px 14px; border-radius: 4px; cursor: pointer;'>" +
-      "    🎯 Aplicar Snipe: Entre Nobre 1 e 2 (" + sp.horaStr + "." + sp.msStr + ")" +
+      "<div style='display: flex; gap: 8px; flex-wrap: wrap; align-items: center;'>" +
+      "  <button type='button' class='btn' id='ssp_btn_snipe_nt_primary' style='background: #009944; color: #fff; font-weight: bold; font-size: 13px; border: 1px solid #00cc55; padding: 6px 16px; border-radius: 5px; cursor: pointer; box-shadow: 0 0 10px rgba(0,255,100,0.25);'>" +
+      "    🎯 ENCAIXAR ENTRE NOBRE 1 E 2 (" + sp.horaStr + "." + sp.msStr + ")" +
       "  </button>" +
       (tremInfo.snipeSecundario ?
-        "  <button type='button' class='btn' id='ssp_btn_snipe_nt_secondary' style='background: #204060; color: #aaddff; border: 1px solid #336699; padding: 5px 12px; border-radius: 4px; cursor: pointer;'>" +
+        "  <button type='button' class='btn' id='ssp_btn_snipe_nt_secondary' style='background: #2a4060; color: #aaddff; font-size: 11px; border: 1px solid #446699; padding: 6px 12px; border-radius: 5px; cursor: pointer;'>" +
         "    🛡️ Entre Nobre 2 e 3 (" + tremInfo.snipeSecundario.horaStr + "." + tremInfo.snipeSecundario.msStr + ")" +
+        "  </button>" : "") +
+      (tremInfo.snipeLimpeza ?
+        "  <button type='button' class='btn' id='ssp_btn_snipe_nt_limpeza' style='background: #3c2525; color: #ffaaaa; font-size: 11px; border: 1px solid #663333; padding: 6px 10px; border-radius: 5px; cursor: pointer;'>" +
+        "    ⚔️ Entre Limpeza e Nobre 1 (" + tremInfo.snipeLimpeza.horaStr + "." + tremInfo.snipeLimpeza.msStr + ")" +
         "  </button>" : "") +
       "</div>" +
       "</div>";
@@ -1682,7 +1742,22 @@ function desenharPlanner(tempoAtual) {
       $("#tipoComandoSSP").val("support");
       escolherOpcoes();
       if (typeof UI !== 'undefined' && UI.InfoMessage) {
-        UI.InfoMessage("Snipe configurado entre o 2º e 3º Nobre (" + ss.horaStr + "." + ss.msStr + ")!", 3000, "success");
+        UI.InfoMessage("Snipe configurado: Entre 2º e 3º Nobre (" + ss.horaStr + "." + ss.msStr + ")!", 3000, "success");
+      }
+    }
+  });
+
+  $(document).off('click', '#ssp_btn_snipe_nt_limpeza').on('click', '#ssp_btn_snipe_nt_limpeza', function(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    if (tremInfo && tremInfo.snipeLimpeza) {
+      var sl = tremInfo.snipeLimpeza;
+      $("#data_input").val(sl.dataStr);
+      $("#hora_input").val(sl.horaStr);
+      $("#ms_input").val(sl.msStr);
+      $("#tipoComandoSSP").val("support");
+      escolherOpcoes();
+      if (typeof UI !== 'undefined' && UI.InfoMessage) {
+        UI.InfoMessage("Apoio configurado: Entre Limpeza e 1º Nobre (" + sl.horaStr + "." + sl.msStr + ")!", 3000, "warning");
       }
     }
   });
