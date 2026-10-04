@@ -80,7 +80,7 @@ var langShinko = [
     "Madeira",                       // 4 - wood
     "Argila",                        // 5 - clay
     "Ferro",                         // 6 - iron
-    "Enviar Recursos",               // 7 - send resources
+    "Enviar",                        // 7 - send resources
     "Balanceador de Armazém — OND BR143", // 8 - credits
     "Total de Madeira",              // 9 - total wood
     "Total de Argila",               // 10 - total clay
@@ -92,67 +92,517 @@ var langShinko = [
     "Sistema"                        // 16 - system
 ];
 
-// ===== CORES DA INTERFACE =====
-if (typeof colors == 'undefined') {
-    cssClassesSophie = `
+// ===== CSS PREMIUM — DESIGN MODERNO =====
+cssClassesSophie = `
 <style>
-.sophRowA {
-    background-color: #32353b;
-    color: white;
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+/* ===== RESET & BASE ===== */
+#whBalancerContainer *, #whBalancerContainer *::before, #whBalancerContainer *::after {
+    box-sizing: border-box;
 }
-.sophRowB {
-    background-color: #36393f;
-    color: white;
+#whBalancerContainer {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: #e2e8f0;
+    margin: 8px 0;
 }
-.sophHeader {
-    background-color: #202225;
-    font-weight: bold;
-    color: white;
+
+/* ===== PAINEL PRINCIPAL ===== */
+.wh-panel {
+    background: linear-gradient(135deg, #1a1d23 0%, #2d3139 100%);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 1px 0 rgba(255,255,255,0.05) inset;
+    margin-bottom: 10px;
 }
-.sophLink {
-    color:#40D0E0;
+
+/* ===== TÍTULO/HEADER ===== */
+.wh-title-bar {
+    background: linear-gradient(135deg, #0f766e 0%, #0d9488 50%, #14b8a6 100%);
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
 }
+.wh-title-bar h2 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    letter-spacing: 0.3px;
+}
+.wh-title-bar .wh-badge {
+    background: rgba(255,255,255,0.15);
+    backdrop-filter: blur(8px);
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #fff;
+    letter-spacing: 0.5px;
+}
+
+/* ===== CARDS DE RECURSOS (TOTAIS) ===== */
+.wh-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    padding: 14px 16px;
+    background: rgba(0,0,0,0.15);
+}
+.wh-stat-card {
+    background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    padding: 12px 14px;
+    transition: all 0.2s ease;
+}
+.wh-stat-card:hover {
+    border-color: rgba(255,255,255,0.12);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+.wh-stat-card .wh-stat-icon {
+    font-size: 18px;
+    margin-bottom: 4px;
+}
+.wh-stat-card .wh-stat-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #94a3b8;
+    margin-bottom: 4px;
+}
+.wh-stat-card .wh-stat-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: #f1f5f9;
+}
+.wh-stat-card .wh-stat-avg {
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 4px;
+}
+.wh-stat-card .wh-stat-avg span {
+    color: #94a3b8;
+    font-weight: 600;
+}
+.wh-stat-card.wood { border-left: 3px solid #a3e635; }
+.wh-stat-card.wood .wh-stat-value { color: #a3e635; }
+.wh-stat-card.clay { border-left: 3px solid #f97316; }
+.wh-stat-card.clay .wh-stat-value { color: #f97316; }
+.wh-stat-card.iron { border-left: 3px solid #94a3b8; }
+.wh-stat-card.iron .wh-stat-value { color: #e2e8f0; }
+
+/* ===== BARRA DE PROGRESSO ===== */
+.wh-progress-wrap {
+    width: 100%;
+    height: 4px;
+    background: rgba(255,255,255,0.05);
+    overflow: hidden;
+}
+.wh-progress-bar {
+    width: 0%;
+    height: 100%;
+    background: linear-gradient(90deg, #14b8a6, #a3e635);
+    transition: width 0.3s ease;
+    border-radius: 0 4px 4px 0;
+}
+
+/* ===== TABELA DE ENVIOS ===== */
+.wh-table-wrap {
+    overflow-x: auto;
+    padding: 0;
+}
+.wh-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 13px;
+}
+.wh-table thead th {
+    background: rgba(0,0,0,0.3);
+    color: #94a3b8;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 10px 12px;
+    text-align: center;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+.wh-table thead th:first-child { text-align: left; }
+.wh-table thead th:nth-child(2) { text-align: left; }
+.wh-table tbody tr {
+    transition: all 0.15s ease;
+}
+.wh-table tbody tr:hover {
+    background: rgba(20, 184, 166, 0.08) !important;
+}
+.wh-table tbody tr:nth-child(odd) {
+    background: rgba(255,255,255,0.015);
+}
+.wh-table tbody tr:nth-child(even) {
+    background: rgba(0,0,0,0.1);
+}
+.wh-table td {
+    padding: 8px 12px;
+    text-align: center;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    vertical-align: middle;
+}
+.wh-table td:first-child, .wh-table td:nth-child(2) {
+    text-align: left;
+}
+.wh-table .wh-village-link {
+    color: #5eead4;
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 12px;
+    transition: color 0.15s;
+}
+.wh-table .wh-village-link:hover {
+    color: #99f6e4;
+    text-decoration: underline;
+}
+.wh-table .wh-dist {
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 600;
+    background: rgba(255,255,255,0.04);
+    border-radius: 6px;
+    padding: 3px 8px;
+    display: inline-block;
+}
+.wh-table .wh-res-wood {
+    color: #a3e635;
+    font-weight: 600;
+    font-size: 12px;
+}
+.wh-table .wh-res-clay {
+    color: #fb923c;
+    font-weight: 600;
+    font-size: 12px;
+}
+.wh-table .wh-res-iron {
+    color: #cbd5e1;
+    font-weight: 600;
+    font-size: 12px;
+}
+
+/* ===== BOTÃO DE ENVIO ===== */
+.wh-btn-send {
+    background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 11px;
+    font-weight: 700;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    letter-spacing: 0.3px;
+    box-shadow: 0 2px 6px rgba(20,184,166,0.25);
+    white-space: nowrap;
+}
+.wh-btn-send:hover {
+    background: linear-gradient(135deg, #14b8a6 0%, #2dd4bf 100%);
+    box-shadow: 0 4px 12px rgba(20,184,166,0.4);
+    transform: translateY(-1px);
+}
+.wh-btn-send:active {
+    transform: translateY(0);
+}
+.wh-btn-send:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* ===== BOTÕES DE AÇÃO (STATS/RESULTADO) ===== */
+.wh-actions {
+    display: flex;
+    gap: 8px;
+    padding: 12px 16px;
+    justify-content: center;
+    background: rgba(0,0,0,0.15);
+    border-top: 1px solid rgba(255,255,255,0.04);
+}
+.wh-btn-action {
+    background: rgba(255,255,255,0.06);
+    color: #e2e8f0;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    letter-spacing: 0.2px;
+}
+.wh-btn-action:hover {
+    background: rgba(255,255,255,0.1);
+    border-color: rgba(255,255,255,0.15);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+/* ===== MENU DE CONFIGURAÇÕES ===== */
+.wh-settings-toggle {
+    background: rgba(255,255,255,0.05);
+    color: #94a3b8;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: auto;
+    text-align: left;
+    outline: none;
+}
+.wh-settings-toggle:hover {
+    background: rgba(255,255,255,0.08);
+    color: #e2e8f0;
+}
+.wh-settings-toggle::after {
+    content: '⚙️';
+    font-size: 14px;
+}
+.wh-settings-toggle.active {
+    background: rgba(20,184,166,0.1);
+    border-color: rgba(20,184,166,0.3);
+    color: #5eead4;
+}
+
+.wh-settings-panel {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease-out, padding 0.3s ease-out;
+    background: linear-gradient(135deg, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.2) 100%);
+}
+.wh-settings-panel.active {
+    max-height: 600px;
+    padding: 16px;
+    border-top: 1px solid rgba(255,255,255,0.04);
+}
+.wh-settings-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+.wh-setting-item {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 8px;
+    padding: 12px;
+}
+.wh-setting-item label {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: #94a3b8;
+    margin-bottom: 8px;
+}
+.wh-setting-item .wh-setting-desc {
+    font-size: 10px;
+    color: #64748b;
+    margin-bottom: 6px;
+}
+.wh-setting-item input[type="range"] {
+    width: 100%;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: rgba(255,255,255,0.1);
+    border-radius: 4px;
+    outline: none;
+}
+.wh-setting-item input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: #14b8a6;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 0 6px rgba(20,184,166,0.5);
+}
+.wh-setting-item .wh-range-value {
+    font-size: 14px;
+    font-weight: 700;
+    color: #5eead4;
+    margin-top: 4px;
+    text-align: right;
+}
+.wh-setting-item input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #14b8a6;
+    cursor: pointer;
+}
+.wh-btn-save {
+    background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 28px;
+    font-size: 13px;
+    font-weight: 700;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    letter-spacing: 0.3px;
+    box-shadow: 0 2px 8px rgba(20,184,166,0.3);
+}
+.wh-btn-save:hover {
+    background: linear-gradient(135deg, #14b8a6 0%, #2dd4bf 100%);
+    box-shadow: 0 4px 16px rgba(20,184,166,0.4);
+    transform: translateY(-1px);
+}
+
+/* ===== TOOLBAR ===== */
+.wh-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    background: rgba(0,0,0,0.1);
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.wh-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.wh-toolbar-info {
+    font-size: 11px;
+    color: #64748b;
+}
+.wh-toolbar-info strong {
+    color: #94a3b8;
+}
+
+/* ===== DIÁLOGOS (STATS/RESULTADO) ===== */
+.wh-dialog-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+}
+.wh-dialog-table th {
+    background: rgba(0,0,0,0.4);
+    color: #94a3b8;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.wh-dialog-table td {
+    padding: 8px 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    color: #e2e8f0;
+}
+.wh-dialog-table tr:nth-child(odd) { background: rgba(255,255,255,0.02); }
+.wh-dialog-table tr:nth-child(even) { background: rgba(0,0,0,0.1); }
+.wh-dialog-table tr:hover { background: rgba(20,184,166,0.06); }
+
+.wh-section-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #e2e8f0;
+    padding: 14px 16px 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Inter', sans-serif;
+}
+.wh-res-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+}
+.wh-res-badge.shortage {
+    background: rgba(239,68,68,0.15);
+    color: #fca5a5;
+}
+.wh-res-badge.excess {
+    background: rgba(34,197,94,0.15);
+    color: #86efac;
+}
+
+/* ===== LINHAS ALTERNADAS LEGADO (compatibilidade) ===== */
+.sophRowA { background-color: rgba(255,255,255,0.015); color: #e2e8f0; }
+.sophRowB { background-color: rgba(0,0,0,0.1); color: #e2e8f0; }
+.sophHeader { background-color: rgba(0,0,0,0.3); font-weight: bold; color: #94a3b8; }
+.sophLink { color: #5eead4; text-decoration: none; }
+.sophLink:hover { color: #99f6e4; }
 .btnSophie {
-    background-image: linear-gradient(#6e7178 0%, #36393f 30%, #202225 80%, black 100%);
+    background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
 }
 .btnSophie:hover {
-    background-image: linear-gradient(#7b7e85 0%, #40444a 30%, #393c40 80%, #171717 100%);
+    background: linear-gradient(135deg, #14b8a6 0%, #2dd4bf 100%);
+    box-shadow: 0 4px 12px rgba(20,184,166,0.4);
 }
+
+/* ===== COLLAPSIBLE LEGADO ===== */
 .collapsible {
-    background-color: #32353b;
-    color: white;
+    background-color: transparent;
+    color: #94a3b8;
     cursor: pointer;
     padding: 10px;
     width: 100%;
     border: none;
     text-align: left;
     outline: none;
-    font-size: 15px;
+    font-size: 13px;
+    font-family: 'Inter', sans-serif;
 }
-.active, .collapsible:hover {
-    background-color: #36393f;
-}
-.collapsible:after {
-    content: '+';
-    color: white;
-    font-weight: bold;
-    float: right;
-    margin-left: 5px;
-}
-.active:after {
-    content: "-";
-}
+.active, .collapsible:hover { background-color: rgba(255,255,255,0.05); }
+.collapsible:after { content: '⚙️'; float: right; margin-left: 5px; }
+.active:after { content: "✕"; }
 .content {
     padding: 0 5px;
     max-height: 0;
     overflow: hidden;
     transition: max-height 0.2s ease-out;
-    background-color: #5b5f66;
-    color: white;
+    background-color: rgba(0,0,0,0.3);
+    color: #e2e8f0;
 }
-.item-padded {
-    padding: 5px;
-}
+.item-padded { padding: 5px; }
 .flex-container {
     display: flex;
     justify-content: space-between;
@@ -166,103 +616,21 @@ if (typeof colors == 'undefined') {
     top: 37px;
     min-width: 240px;
 }
-</style>`;
-} else {
-    if (colors == 'pink') {
-        cssClassesSophie = `
-        <style>
-        .sophRowA { background-color: #FEC5E5; color: #E11584; }
-        .sophRowB { background-color: #fcd4eb; color: #E11584; }
-        .sophHeader { background-color: #F699CD; font-weight: bold; color: #E11584; }
-        .sophLink { color:#7d3873; }
-        .btnSophie { background-image: linear-gradient(#FEC5E5 0%, #FD5DA8 30%, #FF1694 80%, #E11584 100%); }
-        .btnSophie:hover { background-image: linear-gradient(#F2B8C6 0%, #FCBACB 30%, #FA86C4 80%, #FE7F9C 100%); }
-        .collapsible { background-color: #FEC5E5; color: white; cursor: pointer; padding: 10px; width: 100%; border: none; text-align: left; outline: none; font-size: 15px; }
-        .active, .collapsible:hover { background-color: #fcd4eb; }
-        .collapsible:after { content: '+'; color: white; font-weight: bold; float: right; margin-left: 5px; }
-        .active:after { content: "-"; }
-        .content { padding: 0 5px; max-height: 0; overflow: hidden; transition: max-height 0.2s ease-out; background-color: #5b5f66; color: white; }
-        .item-padded { padding: 5px; }
-        .flex-container { display: flex; justify-content: space-between; align-items: center; }
-        .submenu { display: flex; flex-direction: column; position: absolute; left: 0px; top: 37px; min-width: 240px; }
-        </style>`;
-    } else if (colors == "swedish") {
-        cssClassesSophie = `
-        <style>
-        .sophRowA { background-color: #fecd00; color: #006aa8; }
-        .sophRowB { background-color: #ffea00; color: #006aa8; }
-        .sophHeader { background-color: #006aa8; font-weight: bold; color: #ffffdf; }
-        .sophLink { color:#034166; }
-        .btnSophie { background-image: linear-gradient(#00a1fe 0%, #5d9afd 30%, #1626ff 80%, #1f15e1 100%); }
-        .btnSophie:hover { background-image: linear-gradient(#b8bcf2 0%, #babbfc 30%, #8c86fa 80%, #969fff 100%); }
-        .collapsible { background-color: #fecd00; color: white; cursor: pointer; padding: 10px; width: 100%; border: none; text-align: left; outline: none; font-size: 15px; }
-        .active, .collapsible:hover { background-color: #ffea00; }
-        .collapsible:after { content: '+'; color: white; font-weight: bold; float: right; margin-left: 5px; }
-        .active:after { content: "-"; }
-        .content { padding: 0 5px; max-height: 0; overflow: hidden; transition: max-height 0.2s ease-out; background-color: #5b5f66; color: white; }
-        .item-padded { padding: 5px; }
-        .flex-container { display: flex; justify-content: space-between; align-items: center; }
-        .submenu { display: flex; flex-direction: column; position: absolute; left: 0px; top: 37px; min-width: 240px; }
-        </style>`;
-    } else if (colors == "mimimalistGray") {
-        console.log("Mudando para tema cinza");
-        cssClassesSophie = `
-        <style>
-        .sophRowA { background-color: #dedede; color: #545454; }
-        .sophRowB { background-color: #f1f1f1; color: #545454; }
-        .sophHeader { background-color: #ded9d9; font-weight: bold; color: #545454; }
-        .sophLink { color:#1626ff; }
-        .btnSophie { background-image: linear-gradient(#00a1fe 0%, #5d9afd 30%, #1626ff 80%, #1f15e1 100%); color:white; }
-        .btnSophie:hover { background-image: linear-gradient(#b8bcf2 0%, #babbfc 30%, #8c86fa 80%, #969fff 100%); color: white; }
-        .collapsible { background-color: #dedede; color: white; cursor: pointer; padding: 10px; width: 100%; border: none; text-align: left; outline: none; font-size: 15px; }
-        .active, .collapsible:hover { background-color: #f1f1f1; }
-        .collapsible:after { content: '+'; color: white; font-weight: bold; float: right; margin-left: 5px; }
-        .active:after { content: "-"; }
-        .content { padding: 0 5px; max-height: 0; overflow: hidden; transition: max-height 0.2s ease-out; background-color: #5b5f66; color: white; }
-        .item-padded { padding: 5px; }
-        .flex-container { display: flex; justify-content: space-between; align-items: center; }
-        .submenu { display: flex; flex-direction: column; position: absolute; left: 0px; top: 37px; min-width: 240px; }
-        </style>`;
-    } else if (colors == "TW") {
-        console.log("Mudando para tema TW");
-        cssClassesSophie = `
-        <style>
-        .sophRowA { background-color: #F4E4BC; color: black; }
-        .sophRowB { background-color: #fff5da; color: black; }
-        .sophHeader { background-color: #c6a768; font-weight: bold; color: #803000; }
-        .sophLink { color:#803000; }
-        .btnSophie { background-image: linear-gradient(to bottom, #947a62 0%,#7b5c3d 22%,#6c4824 30%,#6c4824 100%); color:white; }
-        .btnSophie:hover { background-image: linear-gradient(to bottom, #b69471 0%,#9f764d 22%,#8f6133 30%,#6c4d2d 100%); color: white; }
-        .collapsible { background-color: #F4E4BC; color: white; cursor: pointer; padding: 10px; width: 100%; border: none; text-align: left; outline: none; font-size: 15px; }
-        .active, .collapsible:hover { background-color: #fff5da; }
-        .collapsible:after { content: '+'; color: white; font-weight: bold; float: right; margin-left: 5px; }
-        .active:after { content: "-"; }
-        .content { padding: 0 5px; max-height: 0; overflow: hidden; transition: max-height 0.2s ease-out; background-color: #5b5f66; color: white; }
-        .item-padded { padding: 5px; }
-        .flex-container { display: flex; justify-content: space-between; align-items: center; }
-        .submenu { display: flex; flex-direction: column; position: absolute; left: 0px; top: 37px; min-width: 240px; }
-        </style>`;
-    } else {
-        console.log("Usando cores padrão");
-        cssClassesSophie = `
-        <style>
-        .sophRowA { background-color: #32353b; color: white; }
-        .sophRowB { background-color: #36393f; color: white; }
-        .sophHeader { background-color: #202225; font-weight: bold; color: white; }
-        .sophLink { color:#40D0E0; }
-        .btnSophie { background-image: linear-gradient(#6e7178 0%, #36393f 30%, #202225 80%, black 100%); }
-        .btnSophie:hover { background-image: linear-gradient(#7b7e85 0%, #40444a 30%, #393c40 80%, #171717 100%); }
-        .collapsible { background-color: #32353b; color: white; cursor: pointer; padding: 10px; width: 100%; border: none; text-align: left; outline: none; font-size: 15px; }
-        .active, .collapsible:hover { background-color: #36393f; }
-        .collapsible:after { content: '+'; color: white; font-weight: bold; float: right; margin-left: 5px; }
-        .active:after { content: "-"; }
-        .content { padding: 0 5px; max-height: 0; overflow: hidden; transition: max-height 0.2s ease-out; background-color: #5b5f66; color: white; }
-        .item-padded { padding: 5px; }
-        .flex-container { display: flex; justify-content: space-between; align-items: center; }
-        .submenu { display: flex; flex-direction: column; position: absolute; left: 0px; top: 37px; min-width: 240px; }
-        </style>`;
-    }
+
+/* ===== ANIMAÇÃO DE ENTRADA ===== */
+@keyframes whSlideIn {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
 }
+#whBalancerContainer {
+    animation: whSlideIn 0.4s ease-out;
+}
+
+/* ===== TOOLTIP CUSTOM ===== */
+.wh-village-link[title] {
+    position: relative;
+}
+</style>`;
 
 // Adicionando classes CSS à página
 $("#contentContainer").eq(0).prepend(cssClassesSophie);
@@ -310,6 +678,9 @@ if ($("#sendResources")[0]) {
     $("#tableSend")[0].remove();
     $("#totals")[0].remove();
 }
+if ($("#whBalancerContainer")[0]) {
+    $("#whBalancerContainer")[0].remove();
+}
 
 // Verificar se é sitter ou não
 if (game_data.player.sitter > 0) {
@@ -322,7 +693,7 @@ if (game_data.player.sitter > 0) {
 
 
 function sendResource(sourceID, targetID, woodAmount, stoneAmount, ironAmount, rowNr) {
-    $("#" + rowNr)[0].remove();
+    $("#whRow_" + rowNr)[0].remove();
     var e = { "target_id": targetID, "wood": woodAmount, "stone": stoneAmount, "iron": ironAmount };
     TribalWars.post("market", {
         ajaxaction: "map_send", village: sourceID
@@ -335,8 +706,8 @@ function sendResource(sourceID, targetID, woodAmount, stoneAmount, ironAmount, r
     setTimeout(function () {
         $(':button[id^="building"]').prop('disabled', false);
         console.log("Botões reativados");
-        if ($("#tableSend tr").length <= 2) {
-            alert("Envio finalizado!");
+        if ($("#whSendTable tbody tr").length <= 0) {
+            alert("✅ Envio finalizado! Todos os recursos foram distribuídos.");
             if ($(".btn-pp").length > 0) {
                 $(".btn-pp").remove();
             }
@@ -359,10 +730,8 @@ function displayEverything() {
             for (var i = 1; i < $page.find("#trades_table tr").length - 1; i++) {
                 var villageData = {};
                 var villageIDtemp;
-                // Verificando se o layout é mobile ou desktop
                 if ($("#mobileHeader")[0]) {
                     console.log("mobile");
-
                     let $resourceGroups = $page.find("#trades_table tr")[i].children[5].children[1].children;
                     for (let j = 0; j < Object.keys($resourceGroups).length; j++) {
                         if ($page.find("#trades_table tr")[1].children[2].innerText != langShinko[16]) {
@@ -376,9 +745,7 @@ function displayEverything() {
                     }
                 } else {
                     console.log("desktop");
-
                     let $resourceGroups = $page.find("#trades_table tr")[i].children[8].children;
-                    console.log(Object.keys($resourceGroups).length);
                     for (let j = 0; j < Object.keys($resourceGroups).length; j++) {
                         let $child = $($resourceGroups[j]);
                         var classNames;
@@ -387,19 +754,15 @@ function displayEverything() {
                         } else {
                             classNames = $child.attr('class').split(' ');
                         }
-
                         if ($page.find("#trades_table tr")[1].children[3].innerText != langShinko[15]) {
                             let resourceType = classNames[classNames.length - 1];
-                            console.log(resourceType);
                             let resourceAmount = $child.text().replace(/[^\d]/g, '');
-                            console.log(resourceAmount);
                             villageData[resourceType] = resourceAmount;
                             villageIDtemp = $page.find("#trades_table tr")[i].children[4].children[0].href.match(/id=(\d*)/)[1];
                         }
                     }
                 }
                 if ($page.find("#trades_table tr")[1].children[3].innerText != langShinko[15] && $page.find("#trades_table tr")[1].children[2].innerText != langShinko[16]) {
-                    // Criando o ID da aldeia no objeto de recursos em trânsito
                     if (incomingRes[villageIDtemp] == undefined) {
                         incomingRes[villageIDtemp] = { "wood": 0, "stone": 0, "iron": 0 };
                     }
@@ -416,13 +779,12 @@ function displayEverything() {
             }
 
 
-            // Buscando dados de todas as aldeias após capturar os transportes em andamento
+            // Buscando dados de todas as aldeias
             $.get(URLProd, function () {
                 console.log("Página de produção carregada");
             })
                 .done(function (page) {
                     testPage = page;
-                    // Diferenciando mobile/desktop para captura de dados
                     uniVillage = $(page).find("span.bonus_icon_33");
                     if (uniVillage.length > 0) {
                         uniRow = uniVillage.closest('tr').index() - 1;
@@ -449,7 +811,6 @@ function displayEverything() {
                             allMerchants.splice(uniRow, 1);
                             productionTable.splice(uniRow, 1);
                         }
-                        // Capturando quantidades de recursos
                         for (var i = 0; i < allWoodObjects.length; i++) {
                             n = allWoodObjects[i].textContent;
                             n = n.replace(/\./g, '').replace(',', '');
@@ -461,8 +822,6 @@ function displayEverything() {
                             n = n.replace(/\./g, '').replace(',', '');
                             allIronTotals.push(n);
                         }
-
-                        // Capturando mercadores disponíveis e totais
                         for (let i = 0; i < allVillages.length; i++) {
                             farmSpaceUsed.push(allFarms[i].parentElement.innerText.match(/(\d*)\/(\d*)/)[1]);
                             farmSpaceTotal.push(allFarms[i].parentElement.innerText.match(/(\d*)\/(\d*)/)[2]);
@@ -484,7 +843,6 @@ function displayEverything() {
                             allClayObjects.splice(uniRow, 1);
                             allIronObjects.splice(uniRow, 1);
                         }
-                        // Capturando quantidades de recursos
                         for (let i = 0; i < allWoodObjects.length; i++) {
                             n = allWoodObjects[i].textContent;
                             n = n.replace(/\./g, '').replace(',', '');
@@ -496,8 +854,6 @@ function displayEverything() {
                             n = n.replace(/\./g, '').replace(',', '');
                             allIronTotals.push(n);
                         }
-
-                        // Capturando capacidade do armazém
                         for (let i = 0; i < allVillages.length; i++) {
                             warehouseCapacity.push(allIronObjects[i].parentElement.nextElementSibling.innerHTML);
                             availableMerchants.push(allIronObjects[i].parentElement.nextElementSibling.nextElementSibling.innerText.match(/(\d*)\/(\d*)/)[1]);
@@ -508,7 +864,7 @@ function displayEverything() {
                         }
                     }
 
-                    // Criando objeto de dados utilizável
+                    // Criando objeto de dados
                     for (let i = 0; i < allVillages.length; i++) {
                         villagesData.push({
                             "id": allVillages[i].dataset.id,
@@ -526,7 +882,7 @@ function displayEverything() {
                         });
                     }
 
-                    // Ordenando para priorizar envio para aldeias menores
+                    // Ordenando para priorizar aldeias menores
                     villagesData.sort((a, b) => (parseInt(a.points) < parseInt(b.points)) ? 1 : -1);
 
                     // Calculando totais e médias
@@ -537,7 +893,6 @@ function displayEverything() {
                     for (let i in allWoodTotals) { totalWood += parseInt(allWoodTotals[i]); }
                     for (let i in allClayTotals) { totalStone += parseInt(allClayTotals[i]); }
                     for (let i in allIronTotals) { totalIron += parseInt(allIronTotals[i]); }
-                    // Adicionando recursos em trânsito ao total
                     for (let o = 0; o < Object.keys(incomingRes).length; o++) {
                         totalWood += incomingRes[Object.keys(incomingRes)[o]].wood;
                         totalStone += incomingRes[Object.keys(incomingRes)[o]].stone;
@@ -549,7 +904,6 @@ function displayEverything() {
 
 
                     if (settings.isMinting == false) {
-                        // Calculando médias reais
                         actualWoodAverage = woodAverage;
                         actualStoneAverage = stoneAverage;
                         actualIronAverage = ironAverage;
@@ -564,27 +918,22 @@ function displayEverything() {
                             actualWoodAverage = Math.floor(actualTotalWood / actualWHCountNeedsBalancingWood);
                             actualStoneAverage = Math.floor(actualTotalStone / actualWHCountNeedsBalancingStone);
                             actualIronAverage = Math.floor(actualTotalIron / actualWHCountNeedsBalancingIron);
-                            // Verificando se a capacidade do armazém é menor que a média
                             if (warehouseCapacity[i] < actualWoodAverage) {
-                                console.log("Armazém da aldeia " + i + " pequeno demais para a média, reduzindo recursos e aumentando para as outras aldeias");
                                 actualTotalWood -= actualWoodAverage - warehouseCapacity[i] * settings.needsMorePercentage;
                                 actualWHCountNeedsBalancingWood--;
                             }
                             if (warehouseCapacity[i] < actualStoneAverage) {
-                                console.log("Armazém da aldeia " + i + " pequeno demais para a média, reduzindo recursos e aumentando para as outras aldeias");
                                 actualTotalStone -= actualStoneAverage - warehouseCapacity[i] * settings.needsMorePercentage;
                                 actualWHCountNeedsBalancingStone--;
                             }
                             if (warehouseCapacity[i] < actualIronAverage) {
-                                console.log("Armazém da aldeia " + i + " pequeno demais para a média, reduzindo recursos e aumentando para as outras aldeias");
                                 actualTotalIron -= actualIronAverage - warehouseCapacity[i] * settings.needsMorePercentage;
                                 actualWHCountNeedsBalancingIron--;
                             }
-                            console.log("Médias atuais: " + actualWoodAverage + "-" + actualIronAverage + "-" + actualStoneAverage);
                         }
 
                         if (actualWoodAverage >= 350000 || actualStoneAverage >= 350000 || actualIronAverage >= 350000) {
-                            alert(`Com as configurações atuais, você tem muitos recursos excedentes que não podem ser distribuídos. Considere aumentar a configuração 'Fazenda alta' para um valor maior, ou aumentar o valor de 'Pontos mínimos' para que mais aldeias sejam incluídas com prioridade. Isto geralmente ocorre quando muitas aldeias estão completamente construídas, ou quando a média de recursos é muito alta e não há aldeias suficientes precisando de recursos.\nSe quiser apenas balancear igualmente, defina 'Fazenda alta' como 99999.\n\nCom as configurações atuais, você está tentando distribuir uma média de ${numberWithCommas(actualWoodAverage)} de madeira, ${numberWithCommas(actualStoneAverage)} de argila e ${numberWithCommas(actualIronAverage)} de ferro por aldeia que não é considerada pequena nem totalmente construída (atualmente ${numberWithCommas(consideredBuiltOut)} são consideradas finalizadas). Claramente, isso não é uma boa ideia.`);
+                            alert(`⚠️ ATENÇÃO — Excesso de Recursos!\n\nCom as configurações atuais, há muitos recursos excedentes que não podem ser distribuídos.\n\n📊 Médias atuais:\n• Madeira: ${numberWithCommas(actualWoodAverage)}\n• Argila: ${numberWithCommas(actualStoneAverage)}\n• Ferro: ${numberWithCommas(actualIronAverage)}\n\n💡 Dicas:\n• Aumente "Fazenda alta" para incluir mais aldeias\n• Aumente "Pontos mínimos" para mais prioridades\n• Para balancear igualmente, defina "Fazenda alta" = 99999\n\nAldeias finalizadas: ${numberWithCommas(consideredBuiltOut)}`);
                         }
 
                     } else {
@@ -592,47 +941,40 @@ function displayEverything() {
                         actualStoneAverage = stoneAverage;
                         actualIronAverage = ironAverage;
                     }
-                    totalsAndAverages = `<div id='totals' class='sophHeader' border=0>
-                    <table id='totalsAndAverages' width='100%'>
-                    <tr class='sophRowA'>
-                    <td>${langShinko[9]}: ${numberWithCommas(totalWood)}</td>
-                    <td>${langShinko[10]}: ${numberWithCommas(totalStone)}</td>
-                    <td>${langShinko[11]}: ${numberWithCommas(totalIron)}</td>
-                    </tr>
-                    <tr class='sophRowB'>
-                    <td>${langShinko[12]}: ${numberWithCommas(woodAverage)}</td>
-                    <td>${langShinko[13]}: ${numberWithCommas(stoneAverage)}</td>
-                    <td>${langShinko[14]}: ${numberWithCommas(ironAverage)}</td>
-                    </tr>
-                    <tr class='sophRowA'>
-                    <td>Média real de madeira após correção: ${numberWithCommas(actualWoodAverage)}</td>
-                    <td>Média real de argila após correção: ${numberWithCommas(actualStoneAverage)}</td>
-                    <td>Média real de ferro após correção: ${numberWithCommas(actualIronAverage)}</td>
-                    </tr>
-                    </table>`;
 
+                    // ===== CONSTRUINDO HTML PREMIUM =====
+                    totalsAndAverages = `
+                    <div id="totals">
+                        <div class="wh-stats-grid">
+                            <div class="wh-stat-card wood">
+                                <div class="wh-stat-icon">🪵</div>
+                                <div class="wh-stat-label">Madeira Total</div>
+                                <div class="wh-stat-value">${numberWithCommas(totalWood)}</div>
+                                <div class="wh-stat-avg">Média: <span>${numberWithCommas(woodAverage)}</span> · Corrigida: <span>${numberWithCommas(actualWoodAverage)}</span></div>
+                            </div>
+                            <div class="wh-stat-card clay">
+                                <div class="wh-stat-icon">🧱</div>
+                                <div class="wh-stat-label">Argila Total</div>
+                                <div class="wh-stat-value">${numberWithCommas(totalStone)}</div>
+                                <div class="wh-stat-avg">Média: <span>${numberWithCommas(stoneAverage)}</span> · Corrigida: <span>${numberWithCommas(actualStoneAverage)}</span></div>
+                            </div>
+                            <div class="wh-stat-card iron">
+                                <div class="wh-stat-icon">⛏️</div>
+                                <div class="wh-stat-label">Ferro Total</div>
+                                <div class="wh-stat-value">${numberWithCommas(totalIron)}</div>
+                                <div class="wh-stat-avg">Média: <span>${numberWithCommas(ironAverage)}</span> · Corrigida: <span>${numberWithCommas(actualIronAverage)}</span></div>
+                            </div>
+                        </div>
+                    </div>`;
+
+                    // Barra de progresso premium
                     $(".content-border").eq(0).prepend(`
-                    <div id="progressbar" style="width: 100%;
-                    background-color: #36393f;"><div id="progress" style="width: 0%;
-                    height: 35px;
-                    background-color: #4CAF50;
-                    text-align: center;
-                    line-height: 32px;
-                    color: black;"></div>
-                    </div>`);
+                    <div id="whProgressWrap" class="wh-progress-wrap"><div id="progress" class="wh-progress-bar"></div></div>`);
                     $("#mobileHeader").eq(0).prepend(`
-                    <div id="progressbar" style="width: 100%;
-                    background-color: #36393f;"><div id="progress" style="width: 0%;
-                    height: 35px;
-                    background-color: #4CAF50;
-                    text-align: center;
-                    line-height: 32px;
-                    color: black;"></div>
-                    </div>`);
+                    <div id="whProgressWrap" class="wh-progress-wrap"><div id="progress" class="wh-progress-bar"></div></div>`);
 
-                    // Encontrando excesso/escassez
+                    // ===== CÁLCULO DE EXCESSO/ESCASSEZ =====
                     for (let v = 0; v < villagesData.length; v++) {
-                        console.log("%c-----------------------------------------------------------------------------------------", 'color: red;');
                         excessResources[v] = [];
                         shortageResources[v] = [];
                         villageID.push(villagesData[v].id);
@@ -645,35 +987,24 @@ function displayEverything() {
                             incomingStone = incomingRes[villagesData[v].id].stone;
                             incomingIron = incomingRes[villagesData[v].id].iron;
                         }
-                        console.log(`%cRecursos em trânsito: 
-                    Madeira: ${incomingWood}
-                    Argila: ${incomingStone}
-                    Ferro: ${incomingIron}`, 'color: teal;');
                         if (actualWoodAverage < villagesData[v].warehouseCapacity * settings.needsMorePercentage) {
                             tempWood = parseInt(villagesData[v].wood) + incomingWood - actualWoodAverage;
                         } else {
-                            console.log("Média maior que a capacidade, reduzindo");
                             tempWood = -Math.round((villagesData[v].warehouseCapacity * settings.needsMorePercentage) - incomingWood - parseInt(villagesData[v].wood));
                         }
                         if (actualStoneAverage < villagesData[v].warehouseCapacity * settings.needsMorePercentage) {
                             tempStone = parseInt(villagesData[v].stone) + incomingStone - actualStoneAverage;
                         } else {
-                            console.log("Média maior que a capacidade, reduzindo");
                             tempStone = -Math.round((villagesData[v].warehouseCapacity * settings.needsMorePercentage) - incomingStone - parseInt(villagesData[v].stone));
                         }
                         if (actualIronAverage < villagesData[v].warehouseCapacity * settings.needsMorePercentage) {
                             tempIron = parseInt(villagesData[v].iron) + incomingIron - actualIronAverage;
                         } else {
-                            console.log("Média maior que a capacidade, reduzindo");
                             tempIron = -Math.round((villagesData[v].warehouseCapacity * settings.needsMorePercentage) - incomingIron - parseInt(villagesData[v].iron));
                         }
-                        console.log(tempWood);
-                        console.log(tempStone);
-                        console.log(tempIron);
 
-                        // Verificando se a aldeia está quase totalmente construída
+                        // Aldeia quase totalmente construída
                         if (villagesData[v].farmSpaceUsed > settings.highFarm || villagesData[v].points > settings.highPoints) {
-                            console.log("Fazenda quase cheia (" + villagesData[v].farmSpaceUsed + "/" + villagesData[v].farmSpaceTotal + ") em " + villagesData[v].name + ", ou pontos da aldeia maiores que a configuração: " + villagesData[v].points + "/" + settings.highPoints + ". Ajustando para deixar " + (100 * settings.builtOutPercentage) + "% em casa");
                             if (parseInt(villagesData[v].wood) + incomingWood > settings.builtOutPercentage * villagesData[v].warehouseCapacity) {
                                 tempWood = Math.round((parseInt(villagesData[v].wood) + incomingWood) - (settings.builtOutPercentage * villagesData[v].warehouseCapacity));
                             }
@@ -685,46 +1016,27 @@ function displayEverything() {
                             }
                         }
 
-                        // Verificando se a aldeia é pequena e precisa de mais recursos
+                        // Aldeia pequena precisa de mais
                         if (villagesData[v].points < settings.lowPoints) {
-                            console.log(villagesData[v].name + " (" + villagesData[v].points + ")" + " precisa de ajuda para crescer, definindo recursos necessários para " + settings.needsMorePercentage * 100 + "% da capacidade do armazém");
                             tempWood = -Math.round((villagesData[v].warehouseCapacity * settings.needsMorePercentage) - parseInt(villagesData[v].wood) - incomingWood);
                             tempStone = -Math.round((villagesData[v].warehouseCapacity * settings.needsMorePercentage) - parseInt(villagesData[v].stone) - incomingStone);
                             tempIron = -Math.round((villagesData[v].warehouseCapacity * settings.needsMorePercentage) - parseInt(villagesData[v].iron) - incomingIron);
                         }
 
                         if (incomingWood + parseInt(villagesData[v].wood) > villagesData[v].warehouseCapacity) {
-                            console.log("Madeira demais em trânsito para " + villagesData[v].name);
                             tempWood = -(Math.round((villagesData[v].warehouseCapacity * settings.needsMorePercentage) - incomingWood - parseInt(villagesData[v].wood)));
                         }
                         if (incomingStone + parseInt(villagesData[v].stone) > villagesData[v].warehouseCapacity) {
-                            console.log("Argila demais em trânsito para " + villagesData[v].name);
                             tempStone = -(Math.round((villagesData[v].warehouseCapacity * settings.needsMorePercentage) - incomingStone - parseInt(villagesData[v].stone)));
                         }
                         if (incomingIron + parseInt(villagesData[v].iron) > villagesData[v].warehouseCapacity) {
-                            console.log("Ferro demais em trânsito para " + villagesData[v].name);
                             tempIron = -(Math.round((villagesData[v].warehouseCapacity * settings.needsMorePercentage) - incomingIron - parseInt(villagesData[v].iron)));
                         }
 
-                        // Verificando se o excesso é maior que os recursos disponíveis
-                        if (tempWood > 0 && tempWood > parseInt(villagesData[v].wood)) {
-                            console.log("Excesso maior que os recursos disponíveis, ajustando para o disponível atual");
-                            tempWood = parseInt(villagesData[v].wood);
-                        }
-                        if (tempStone > 0 && tempStone > parseInt(villagesData[v].stone)) {
-                            console.log("Excesso maior que os recursos disponíveis, ajustando para o disponível atual");
-                            tempStone = parseInt(villagesData[v].stone);
-                        }
-                        if (tempIron > 0 && tempIron > parseInt(villagesData[v].iron)) {
-                            console.log("Excesso maior que os recursos disponíveis, ajustando para o disponível atual");
-                            tempIron = parseInt(villagesData[v].iron);
-                        }
+                        if (tempWood > 0 && tempWood > parseInt(villagesData[v].wood)) { tempWood = parseInt(villagesData[v].wood); }
+                        if (tempStone > 0 && tempStone > parseInt(villagesData[v].stone)) { tempStone = parseInt(villagesData[v].stone); }
+                        if (tempIron > 0 && tempIron > parseInt(villagesData[v].iron)) { tempIron = parseInt(villagesData[v].iron); }
 
-                        console.log("Aldeia: " + villagesData[v].name + '\n' + "                    Capacidade máx final: " + villagesData[v].warehouseCapacity * settings.needsMorePercentage + '\n' + "                    Capacidade armazém: " + villagesData[v].warehouseCapacity + '\n' + "                    Madeira: " + parseInt(villagesData[v].wood) + '\n' + "                    Argila: " + parseInt(villagesData[v].stone) + '\n' + "                    Ferro: " + parseInt(villagesData[v].iron));
-                        console.log("Ajuste madeira: " + tempWood + ", ajuste argila: " + tempStone + ", ajuste ferro: " + tempIron);
-
-
-                        // Verificando madeira
                         if (tempWood > 0) {
                             excessResources[v].push({ "wood": Math.floor(tempWood / 1000) * 1000 });
                             shortageResources[v].push({ "wood": 0 });
@@ -732,7 +1044,6 @@ function displayEverything() {
                             shortageResources[v].push({ "wood": Math.floor(-tempWood / 1000) * 1000 });
                             excessResources[v].push({ "wood": 0 });
                         }
-                        // Verificando argila
                         if (tempStone > 0) {
                             excessResources[v].push({ "stone": Math.floor(tempStone / 1000) * 1000 });
                             shortageResources[v].push({ "stone": 0 });
@@ -740,7 +1051,6 @@ function displayEverything() {
                             shortageResources[v].push({ "stone": Math.floor(-tempStone / 1000) * 1000 });
                             excessResources[v].push({ "stone": 0 });
                         }
-                        // Verificando ferro
                         if (tempIron > 0) {
                             excessResources[v].push({ "iron": Math.floor(tempIron / 1000) * 1000 });
                             shortageResources[v].push({ "iron": 0 });
@@ -748,12 +1058,11 @@ function displayEverything() {
                             shortageResources[v].push({ "iron": Math.floor(-tempIron / 1000) * 1000 });
                             excessResources[v].push({ "iron": 0 });
                         }
-
                     }
+
                     // Atribuindo mercadores
                     for (let p = 0; p < excessResources.length; p++) {
                         tempAllExcessCombined = parseInt(Math.floor(excessResources[p][0].wood / 1000) * 1000) + parseInt(Math.floor(excessResources[p][1].stone / 1000) * 1000) + parseInt(Math.floor(excessResources[p][2].iron / 1000) * 1000);
-
                         if (tempAllExcessCombined > 0) {
                             tempMaxMerchantsNeeded = Math.floor(tempAllExcessCombined / 1000);
                             if (tempMaxMerchantsNeeded < villagesData[p].availableMerchants) {
@@ -767,19 +1076,16 @@ function displayEverything() {
                         }
                     }
 
-                    // Atribuindo excesso à escassez — MADEIRA
+                    // ===== DISTRIBUIÇÃO: MADEIRA =====
                     for (let q = shortageResources.length - 1; q >= 0; q--) {
                         $("#progress").css("width", `${(shortageResources.length - q) / shortageResources.length * 100}%`);
                         for (let d = 0; d < merchantOrders.length; d++) {
                             merchantOrders[d].distance = checkDistance(merchantOrders[d].x, merchantOrders[d].y, villagesData[q].name.match(/(\d+)\|(\d+)/)[1], villagesData[q].name.match(/(\d+)\|(\d+)/)[2]);
                         }
                         merchantOrders.sort(function (left, right) { return left.distance - right.distance; });
-                        if (shortageResources[q][0].wood <= 0) {
-                            // Sem escassez
-                        } else {
+                        if (shortageResources[q][0].wood > 0) {
                             while (shortageResources[q][0].wood > 0) {
                                 var totalWoodToTrade = 0;
-
                                 for (let m = 0; m < merchantOrders.length; m++) {
                                     totalWoodToTrade += merchantOrders[m].wood;
                                     if (merchantOrders[m].wood > 0) {
@@ -795,32 +1101,22 @@ function displayEverything() {
                                         }
                                     }
                                     if (shortageResources[q][0].wood <= 0) { break; }
-                                    if (m == merchantOrders.length - 1 && shortageResources[q][0].wood > 0) {
-                                        console.log("Ciclo finalizado");
-                                        totalWoodToTrade = 0;
-                                        break;
-                                    }
+                                    if (m == merchantOrders.length - 1 && shortageResources[q][0].wood > 0) { totalWoodToTrade = 0; break; }
                                 }
-                                if (totalWoodToTrade == 0) {
-                                    q = 0;
-                                    break;
-                                }
+                                if (totalWoodToTrade == 0) { q = 0; break; }
                             }
                         }
                     }
 
-                    // Atribuindo excesso à escassez — ARGILA
+                    // ===== DISTRIBUIÇÃO: ARGILA =====
                     for (let q = shortageResources.length - 1; q >= 0; q--) {
                         $("#progress").css("width", `${(shortageResources.length - q) / shortageResources.length * 100}%`);
                         for (var d = 0; d < merchantOrders.length; d++) {
                             merchantOrders[d].distance = checkDistance(merchantOrders[d].x, merchantOrders[d].y, villagesData[q].name.match(/(\d+)\|(\d+)/)[1], villagesData[q].name.match(/(\d+)\|(\d+)/)[2]);
                         }
                         merchantOrders.sort(function (left, right) { return left.distance - right.distance; });
-                        if (shortageResources[q][1].stone <= 0) {
-                            // Sem escassez
-                        } else {
+                        if (shortageResources[q][1].stone > 0) {
                             while (shortageResources[q][1].stone > 0) {
-                                console.log(q);
                                 var totalstoneToTrade = 0;
                                 for (var m = 0; m < merchantOrders.length; m++) {
                                     totalstoneToTrade += merchantOrders[m].stone;
@@ -837,30 +1133,21 @@ function displayEverything() {
                                         }
                                     }
                                     if (shortageResources[q][1].stone <= 0) { break; }
-                                    if (m == merchantOrders.length - 1 && shortageResources[q][1].stone > 0) {
-                                        console.log("Ciclo finalizado");
-                                        totalstoneToTrade = 0;
-                                        break;
-                                    }
+                                    if (m == merchantOrders.length - 1 && shortageResources[q][1].stone > 0) { totalstoneToTrade = 0; break; }
                                 }
-                                if (totalstoneToTrade == 0) {
-                                    q = 0;
-                                    break;
-                                }
+                                if (totalstoneToTrade == 0) { q = 0; break; }
                             }
                         }
                     }
 
-                    // Atribuindo excesso à escassez — FERRO
+                    // ===== DISTRIBUIÇÃO: FERRO =====
                     for (let q = shortageResources.length - 1; q >= 0; q--) {
                         $("#progress").css("width", `${(shortageResources.length - q) / shortageResources.length * 100}%`);
                         for (let d = 0; d < merchantOrders.length; d++) {
                             merchantOrders[d].distance = checkDistance(merchantOrders[d].x, merchantOrders[d].y, villagesData[q].name.match(/(\d+)\|(\d+)/)[1], villagesData[q].name.match(/(\d+)\|(\d+)/)[2]);
                         }
                         merchantOrders.sort(function (left, right) { return left.distance - right.distance; });
-                        if (shortageResources[q][2].iron <= 0) {
-                            // Sem escassez
-                        } else {
+                        if (shortageResources[q][2].iron > 0) {
                             while (shortageResources[q][2].iron > 0) {
                                 var totalironToTrade = 0;
                                 for (let m = 0; m < merchantOrders.length; m++) {
@@ -878,94 +1165,104 @@ function displayEverything() {
                                         }
                                     }
                                     if (shortageResources[q][2].iron <= 0) { break; }
-                                    if (m == merchantOrders.length - 1 && shortageResources[q][2].iron > 0) {
-                                        console.log("Ciclo finalizado");
-                                        totalironToTrade = 0;
-                                        break;
-                                    }
+                                    if (m == merchantOrders.length - 1 && shortageResources[q][2].iron > 0) { totalironToTrade = 0; break; }
                                 }
-                                if (totalironToTrade == 0) {
-                                    q = 0;
-                                    break;
-                                }
+                                if (totalironToTrade == 0) { q = 0; break; }
                             }
                         }
                     }
-                    $("#progress").remove();
-                    // Todos os mercadores atribuídos
+                    $("#whProgressWrap").remove();
 
-                    htmlCode = `<div id="restart">${totalsAndAverages}</div>
-                    <div id="sendResources" class="flex-container sophHeader" style="position: relative">
-                        <button class="sophRowA collapsible" style="width: 250px;min-width: 230px;">Abrir menu de configurações</button>
-                        <div class="content submenu" style="width: 500px;height:500px;z-index:99999">
+                    // ===== MONTAGEM DO HTML FINAL =====
+                    htmlCode = `<div id="whBalancerContainer">
+                    <div class="wh-panel">
+                        <div class="wh-title-bar">
+                            <h2>⚖️ ${langShinko[0]}</h2>
+                            <span class="wh-badge">${villagesData.length} aldeias · OND BR143</span>
+                        </div>
+
+                        ${totalsAndAverages}
+
+                        <div class="wh-toolbar">
+                            <div class="wh-toolbar-left">
+                                <button class="wh-settings-toggle" onclick="toggleWhSettings(this)">Configurações</button>
+                            </div>
+                            <div class="wh-toolbar-info">
+                                Clique em <strong>"${langShinko[7]}"</strong> para enviar cada lote
+                            </div>
+                        </div>
+
+                        <div id="whSettingsPanel" class="wh-settings-panel">
                             <form id="settings">
-                                <table style="border-spacing: 2px;">
-                                <tr>
-                                <td style="padding: 6px;">
-                                <label for="isMinting">Ignorar configurações</label></td><td style="padding: 6px;"><input type="checkbox" name="isMinting"></td></tr>
-                                <tr>
-                                <td style="padding: 6px;">
-                                <label for="lowPoints">Priorizar aldeias com menos de</label></td><td style="padding: 6px;"><input type="range" min="0" max="13000" step="10" value="${settings.lowPoints}" class="slider" name="lowPoints" oninput="sliderChange('lowPoints',this.value)">
-                                < <output id="lowPoints"></output> pontos</td></tr>
-                                <tr>
-                                <td style="padding: 6px;">
-                                <label for="highPoints">Aldeias finalizadas acima de</label></td><td style="padding: 6px;"><input type="range" min="0" max="13000" step="10" value="${settings.highPoints}" class="slider" name="highPoints" oninput="sliderChange('highPoints',this.value)">
-                                > <output id="highPoints"></output> pontos</td></tr>
-                                <tr>
-                                <td style="padding: 6px;">
-                                <label for="highFarm">Fazenda alta</label></td><td style="padding: 6px;"><input type="range" min="0" max="33000" step="10" value="${settings.highFarm}" class="slider" name="highFarm" oninput="sliderChange('highFarm',this.value)">
-                                <output id="highFarm"></output> pop</td></tr>
-                                <tr>
-                                <td style="padding: 6px;">
-                                <label for="builtOutPercentage">% do armazém p/ aldeias finalizadas: </label></td><td style="padding: 6px;"><input type="range" min="0" max="1" step="0.01" value="${settings.builtOutPercentage}" class="slider" name="highFarm" oninput="sliderChange('builtOutPercentage',this.value)">
-                                <output id="builtOutPercentage"></output></td></tr>
-                                <tr>
-                                <td style="padding: 6px;">
-                                <label for="needsMorePercentage">% do armazém p/ aldeias prioritárias: </label></td><td style="padding: 6px;"><input type="range" min="0" max="1" step="0.01" value="${settings.needsMorePercentage}" class="slider" name="needsMorePercentage" oninput="sliderChange('needsMorePercentage',this.value)">
-                                <output id="needsMorePercentage"></output></td></tr>
-                                <tr>
-                                <td style="padding: 6px;">
-                                <input type="button" class="btn evt-confirm-btn btn-confirm-yes" value="Salvar" onclick="saveSettings();"/></td></tr>
-                                <td colspan="2" style="padding: 6px;">
-                                <p style="padding:5px"><font size="1">Balanceador de Armazém — OND BR143</font></p>
-                                </td>
-                                </table>
+                                <div class="wh-settings-grid">
+                                    <div class="wh-setting-item">
+                                        <label>⚡ Ignorar configurações</label>
+                                        <div class="wh-setting-desc">Balancear igualmente sem regras</div>
+                                        <input type="checkbox" name="isMinting">
+                                    </div>
+                                    <div class="wh-setting-item">
+                                        <label>🏗️ Priorizar aldeias menores que</label>
+                                        <div class="wh-setting-desc">Aldeias abaixo desse nível recebem mais recursos</div>
+                                        <input type="range" min="0" max="13000" step="10" value="${settings.lowPoints}" name="lowPoints" oninput="sliderChange('lowPointsVal',this.value)">
+                                        <div class="wh-range-value"><span id="lowPointsVal">${settings.lowPoints}</span> pontos</div>
+                                    </div>
+                                    <div class="wh-setting-item">
+                                        <label>🏰 Aldeias finalizadas acima de</label>
+                                        <div class="wh-setting-desc">Acima desse nível, a aldeia recebe menos recursos</div>
+                                        <input type="range" min="0" max="13000" step="10" value="${settings.highPoints}" name="highPoints" oninput="sliderChange('highPointsVal',this.value)">
+                                        <div class="wh-range-value"><span id="highPointsVal">${settings.highPoints}</span> pontos</div>
+                                    </div>
+                                    <div class="wh-setting-item">
+                                        <label>🌾 Fazenda alta (população)</label>
+                                        <div class="wh-setting-desc">Aldeias com farm acima disso são consideradas prontas</div>
+                                        <input type="range" min="0" max="33000" step="10" value="${settings.highFarm}" name="highFarm" oninput="sliderChange('highFarmVal',this.value)">
+                                        <div class="wh-range-value"><span id="highFarmVal">${settings.highFarm}</span> pop</div>
+                                    </div>
+                                    <div class="wh-setting-item">
+                                        <label>📦 % armazém → aldeias prontas</label>
+                                        <div class="wh-setting-desc">Quanto do armazém manter cheio nas aldeias finalizadas</div>
+                                        <input type="range" min="0" max="1" step="0.01" value="${settings.builtOutPercentage}" name="builtOutPercentage" oninput="sliderChange('builtOutVal',this.value)">
+                                        <div class="wh-range-value"><span id="builtOutVal">${settings.builtOutPercentage}</span></div>
+                                    </div>
+                                    <div class="wh-setting-item">
+                                        <label>🎯 % armazém → aldeias prioritárias</label>
+                                        <div class="wh-setting-desc">Quanto do armazém encher nas aldeias que precisam crescer</div>
+                                        <input type="range" min="0" max="1" step="0.01" value="${settings.needsMorePercentage}" name="needsMorePercentage" oninput="sliderChange('needsMoreVal',this.value)">
+                                        <div class="wh-range-value"><span id="needsMoreVal">${settings.needsMorePercentage}</span></div>
+                                    </div>
+                                </div>
+                                <div style="text-align:center">
+                                    <button type="button" class="wh-btn-save" onclick="saveSettings()">💾 Salvar e Recalcular</button>
+                                </div>
                             </form>
                         </div>
+
+                        <div id="sendResources" class="wh-table-wrap">
+                            <table id="tableSend" class="wh-table">
+                                <thead>
+                                    <tr>
+                                        <th>📤 ${langShinko[1]}</th>
+                                        <th>📥 ${langShinko[2]}</th>
+                                        <th>📏 ${langShinko[3]}</th>
+                                        <th>🪵 ${langShinko[4]}</th>
+                                        <th>🧱 ${langShinko[5]}</th>
+                                        <th>⛏️ ${langShinko[6]}</th>
+                                        <th>Ação</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="whSendTable"></tbody>
+                            </table>
+                        </div>
                     </div>
-                    <table id="tableSend" width="100%" class="sophHeader">
-                    <tbody id="appendHere">
-                        <tr>
-                            <td class="sophHeader" colspan=7 width="550" style="text-align:center" >${langShinko[0]}</td>
-                        </tr>
-                        <tr>
-                            <td class="sophHeader" width="25%" style="text-align:center">${langShinko[1]}</td>
-                            <td class="sophHeader" width="25%" style="text-align:center">${langShinko[2]}</td>
-                            <td class="sophHeader" width="5%" style="text-align:center">${langShinko[3]}</td>
-                            <td class="sophHeader" width="10%" style="text-align:center">${langShinko[4]}</td>
-                            <td class="sophHeader" width="10%" style="text-align:center">${langShinko[5]}</td>
-                            <td class="sophHeader" width="10%" style="text-align:center">${langShinko[6]}</td>
-                            <td class="sophHeader" width="10%">
-                                <font size="1">${langShinko[8]}</font>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-                    `;
+                </div>`;
 
 
                     $("#content_value").eq(0).prepend(htmlCode);
                     if (is_mobile == true) {
                         $("#mobile_header").eq(0).prepend(htmlCode);
                     }
-                    // Construindo a tabela
+                    // Preenchendo settings
                     $("input[name='isMinting']").attr("checked", settings.isMinting);
-                    $("#lowPoints").val(settings.lowPoints);
-                    $("#highPoints").val(settings.highPoints);
-                    $("#highFarm").val(settings.highFarm);
-                    $("#builtOutPercentage").val(settings.builtOutPercentage);
-                    $("#needsMorePercentage").val(settings.needsMorePercentage);
-                    makeThingsCollapsible();
                     createList();
                 })
 
@@ -981,14 +1278,12 @@ function displayEverything() {
 
     function createList() {
         console.log("Iniciando criação da lista");
-        // Adicionando tipos de recurso faltantes nos envios
         for (let i = 0; i < links.length; i++) {
             if (links[i].wood == undefined) links[i].wood = 0;
             if (links[i].stone == undefined) links[i].stone = 0;
             if (links[i].iron == undefined) links[i].iron = 0;
         }
-        console.log("Preenchidos os envios");
-        // Limpando os envios, combinando duplicatas
+        // Combinando envios duplicados
         for (let i = 0; i < links.length; i++) {
             for (let j = 0; j < links.length; j++) {
                 if (links[i].source == links[j].source && links[i].target == links[j].target && i != j) {
@@ -1001,29 +1296,20 @@ function displayEverything() {
                 }
             }
         }
-        console.log("Envios combinados");
         for (let i = 0; i < links.length; i++) {
             if (links[i].wood + links[i].stone + links[i].iron == 0) {
                 delete links[i];
             }
         }
-        console.log('Linhas vazias removidas');
         for (let i = 0; i < Object.keys(links).length; i++) {
             cleanLinks.push(links[Object.keys(links)[i]]);
         }
 
-        console.log("Transferido para array limpo");
         cleanLinks = addDistanceToArray(cleanLinks);
-        // Criando todas as linhas de envio
         listHTML = ``;
         cleanLinks.sort(function (left, right) { return left.distance - right.distance; });
+
         for (let i = 0; i < cleanLinks.length; i++) {
-            console.log("Criando linha " + i + " da lista");
-            if (i % 2 == 0) {
-                tempRow = " id='" + i + "' class='sophRowB'";
-            } else {
-                tempRow = " id='" + i + "' class='sophRowA'";
-            }
             for (let property in villagesData) {
                 if (villagesData[property].id == cleanLinks[i].source) {
                     sourceName = villagesData[property].name;
@@ -1042,38 +1328,37 @@ function displayEverything() {
             }
 
             listHTML += `
-        <tr ${tempRow} height="40">
-            <td><a href="${sourceURL}" class="sophLink">${sourceName} </a></td>
-            <td> <a href="${targetURL}" class="sophLink" data-toggle="tooltip" title="Madeira no armazém: ${targetWood} &#10;Argila no armazém: ${targetStone}&#10;Ferro no armazém: ${targetIron}&#10;Capacidade do armazém: ${targetCapacity}">${targetName}</a> </td>
-            <td width="50" style="text-align:center">${cleanLinks[i].distance}</td>
-            <td width="50" style="text-align:center">${cleanLinks[i].wood}<span class="icon header wood"> </span></td>
-            <td width="50" style="text-align:center">${cleanLinks[i].stone}<span class="icon header stone"> </span></td>
-            <td width="50" style="text-align:center">${cleanLinks[i].iron}<span class="icon header iron"> </span></td>
-            <td style="text-align:center"><input type="button" class="btn btnSophie" id="building" tabindex="-1" value="${langShinko[7]}" onclick="sendResource(${cleanLinks[i].source},${cleanLinks[i].target},${cleanLinks[i].wood},${cleanLinks[i].stone},${cleanLinks[i].iron},${i})"></td>
-        </tr>`;
+            <tr id="whRow_${i}">
+                <td><a href="${sourceURL}" class="wh-village-link">${sourceName}</a></td>
+                <td><a href="${targetURL}" class="wh-village-link" title="🪵 ${targetWood} · 🧱 ${targetStone} · ⛏️ ${targetIron} · 📦 ${targetCapacity}">${targetName}</a></td>
+                <td><span class="wh-dist">${cleanLinks[i].distance}</span></td>
+                <td><span class="wh-res-wood">${numberWithCommas(cleanLinks[i].wood)}</span></td>
+                <td><span class="wh-res-clay">${numberWithCommas(cleanLinks[i].stone)}</span></td>
+                <td><span class="wh-res-iron">${numberWithCommas(cleanLinks[i].iron)}</span></td>
+                <td><button type="button" class="wh-btn-send" id="building" tabindex="-1" onclick="sendResource(${cleanLinks[i].source},${cleanLinks[i].target},${cleanLinks[i].wood},${cleanLinks[i].stone},${cleanLinks[i].iron},${i})">📨 ${langShinko[7]}</button></td>
+            </tr>`;
         }
-        $("#appendHere").eq(0).append(listHTML);
-        $("#building")[0].focus();
+        $("#whSendTable").eq(0).append(listHTML);
+        if ($("#building")[0]) $("#building")[0].focus();
 
-        // Adicionando escassez/excesso na tabela inferior
-
+        // Escassez/excesso restantes
         for (let i = 0; i < shortageResources.length; i++) {
             if (parseInt(shortageResources[i][0].wood) + parseInt(shortageResources[i][1].stone) + parseInt(shortageResources[i][2].iron) != 0) {
                 stillShortage.push([villagesData[i].name, shortageResources[i]]);
             }
         }
-
-
         for (let i = 0; i < excessResources.length; i++) {
             if (parseInt(excessResources[i][0].wood) + parseInt(excessResources[i][1].stone) + parseInt(excessResources[i][2].iron) != 0) {
                 stillExcess.push([villagesData[i].name, excessResources[i]]);
             }
         }
 
-        $("#totals").eq(0).append(`<div id='aftermath'><center>
-        <button type="button" class="btn btnSophie" name="showStats" style="padding: 10px;width: 300px" onclick="showStats()">Mostrar excesso/escassez</button>
-        <button type="button" class="btn btnSophie" name="showEndResult" style="padding: 10px;width: 300px" onclick="resAfterBalance()">Mostrar resultado do balanceamento</button>
-        </center></div>`);
+        // Botões de ação
+        $("#totals").eq(0).append(`
+        <div class="wh-actions">
+            <button type="button" class="wh-btn-action" onclick="showStats()">📊 Mostrar Excesso / Escassez</button>
+            <button type="button" class="wh-btn-action" onclick="resAfterBalance()">📋 Resultado do Balanceamento</button>
+        </div>`);
         console.log("Finalizado");
     }
 
@@ -1084,10 +1369,8 @@ displayEverything();
 function checkDistance(x1, y1, x2, y2) {
     var a = x1 - x2;
     var b = y1 - y2;
-    var distance = Math.round(Math.hypot(a, b));
-    return distance;
+    return Math.round(Math.hypot(a, b));
 }
-
 
 function addDistanceToArray(array) {
     for (let i = 0; i < array.length; i++) {
@@ -1116,41 +1399,43 @@ function numberWithCommas(x) {
     return x;
 }
 
+function toggleWhSettings(btn) {
+    var panel = document.getElementById("whSettingsPanel");
+    btn.classList.toggle("active");
+    panel.classList.toggle("active");
+}
+
 function showStats() {
-    htmlStats = "<div class='sophRowA' style='width:800px' ><center><h1>Escassez:</h1><table class='sophHeader'><tr class='sophHeader'><td>Nome da aldeia</td><td>Recursos</td></tr>";
+    htmlStats = `<div style="font-family:'Inter',sans-serif;max-width:850px;background:#1a1d23;border-radius:12px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.5);">
+    <div class="wh-section-title" style="background:rgba(239,68,68,0.1);border-bottom:1px solid rgba(239,68,68,0.2);">
+        🔻 Escassez de Recursos (${stillShortage.length} aldeias)
+    </div>
+    <table class="wh-dialog-table"><tr><th>Aldeia</th><th>🪵 Madeira</th><th>🧱 Argila</th><th>⛏️ Ferro</th></tr>`;
 
     for (let i = 0; i < stillShortage.length; i++) {
-        console.log("Criando linha " + i + " da lista");
-        if (i % 2 == 0) {
-            tempRow = " id='" + i + "' class='sophRowB'";
-        } else {
-            tempRow = " id='" + i + "' class='sophRowA'";
-        }
-
-        htmlStats += `
-        <tr ${tempRow} height="40">
-            <td>${stillShortage[i][0]}</td>
-            <td>${stillShortage[i][1][0].wood} , ${stillShortage[i][1][1].stone} , ${stillShortage[i][1][2].iron}</td>
+        htmlStats += `<tr>
+            <td style="font-weight:600">${stillShortage[i][0]}</td>
+            <td><span class="wh-res-badge shortage">${numberWithCommas(stillShortage[i][1][0].wood)}</span></td>
+            <td><span class="wh-res-badge shortage">${numberWithCommas(stillShortage[i][1][1].stone)}</span></td>
+            <td><span class="wh-res-badge shortage">${numberWithCommas(stillShortage[i][1][2].iron)}</span></td>
         </tr>`;
     }
 
-    htmlStats += "</table><h1>Excessos:</h1><table class='sophHeader'><tr class='sophHeader'><td>Nome da aldeia</td><td>Recursos</td></tr>";
+    htmlStats += `</table>
+    <div class="wh-section-title" style="background:rgba(34,197,94,0.1);border-bottom:1px solid rgba(34,197,94,0.2);">
+        🔺 Excesso de Recursos (${stillExcess.length} aldeias)
+    </div>
+    <table class="wh-dialog-table"><tr><th>Aldeia</th><th>🪵 Madeira</th><th>🧱 Argila</th><th>⛏️ Ferro</th></tr>`;
 
     for (let i = 0; i < stillExcess.length; i++) {
-        console.log("Criando linha " + i + " da lista");
-        if (i % 2 == 0) {
-            tempRow = " id='" + i + "' class='sophRowB'";
-        } else {
-            tempRow = " id='" + i + "' class='sophRowA'";
-        }
-
-        htmlStats += `
-        <tr ${tempRow} height="40">
-            <td>${stillExcess[i][0]}</td>
-            <td>${stillExcess[i][1][0].wood} , ${stillExcess[i][1][1].stone} , ${stillExcess[i][1][2].iron}</td>
+        htmlStats += `<tr>
+            <td style="font-weight:600">${stillExcess[i][0]}</td>
+            <td><span class="wh-res-badge excess">${numberWithCommas(stillExcess[i][1][0].wood)}</span></td>
+            <td><span class="wh-res-badge excess">${numberWithCommas(stillExcess[i][1][1].stone)}</span></td>
+            <td><span class="wh-res-badge excess">${numberWithCommas(stillExcess[i][1][2].iron)}</span></td>
         </tr>`;
     }
-    htmlStats += "</table></center></div>";
+    htmlStats += "</table></div>";
 
     Dialog.show("content", htmlStats);
 }
@@ -1188,7 +1473,7 @@ function saveSettings() {
         settings.needsMorePercentage = parseFloat(tempArray[4].value);
     }
     localStorage.setItem("settingsWHBalancerSophie", JSON.stringify(settings));
-    $(".flex-container").remove();
+    $("#whBalancerContainer").remove();
     $("div[id*='restart']").remove();
     $("div[id*='sendResources']").remove();
     init();
@@ -1200,11 +1485,16 @@ function sliderChange(name, val) {
 }
 
 function resAfterBalance() {
-    resBalancedHTML = `<div class='sophRowA' style='width:800px' ><table style='width:100%'><tr class="sophHeader"><td>Aldeia</td><td>Pontos</td><td>Mercadores restantes</td><td colspan="3">Recursos</td><td>Capacidade do Armazém</td></tr>`;
+    resBalancedHTML = `<div style="font-family:'Inter',sans-serif;max-width:900px;background:#1a1d23;border-radius:12px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.5);">
+    <div class="wh-section-title" style="background:rgba(20,184,166,0.1);border-bottom:1px solid rgba(20,184,166,0.2);">
+        📋 Resultado Final do Balanceamento
+    </div>
+    <table class="wh-dialog-table">
+    <tr><th>Aldeia</th><th>Pontos</th><th>Mercadores</th><th>🪵 Madeira</th><th>🧱 Argila</th><th>⛏️ Ferro</th><th>📦 Armazém</th></tr>`;
+
     for (var i = 0; i < villagesData.length; i++) {
         thisMerchantLeft = villagesData[i].availableMerchants;
         if (incomingRes[villagesData[i].id] != undefined) {
-            console.log("Adicionando recursos em trânsito ao destino");
             thisVillageTotalWood = incomingRes[villagesData[i].id].wood + parseInt(villagesData[i].wood);
             thisVillageTotalStone = incomingRes[villagesData[i].id].stone + parseInt(villagesData[i].stone);
             thisVillageTotalIron = incomingRes[villagesData[i].id].iron + parseInt(villagesData[i].iron);
@@ -1215,13 +1505,11 @@ function resAfterBalance() {
         }
         for (var j = 0; j < cleanLinks.length; j++) {
             if (cleanLinks[j].target == villagesData[i].id) {
-                console.log('Adicionando recursos a serem recebidos no destino');
                 thisVillageTotalWood += cleanLinks[j].wood;
                 thisVillageTotalStone += cleanLinks[j].stone;
                 thisVillageTotalIron += cleanLinks[j].iron;
             }
             if (cleanLinks[j].source == villagesData[i].id) {
-                console.log('Subtraindo recursos a serem enviados da origem');
                 thisVillageTotalWood -= cleanLinks[j].wood;
                 thisVillageTotalStone -= cleanLinks[j].stone;
                 thisVillageTotalIron -= cleanLinks[j].iron;
@@ -1229,29 +1517,15 @@ function resAfterBalance() {
             }
         }
 
-        if (i % 2 == 0) {
-            tempRow = "class='sophRowB'";
-        } else {
-            tempRow = "class='sophRowA'";
-        }
-
         resBalancedHTML += `
-        <tr ${tempRow}>
-            <td>${villagesData[i].name}</td>
-            <td>${villagesData[i].points}</td>
-            <td style="text-align:right;padding-right:2em">
-                ${thisMerchantLeft + "/" + villagesData[i].totalMerchants}
-            </td>
-            <td>
-                <span class="res wood" style="padding-left:1em">&nbsp;</span>${thisVillageTotalWood}
-            </td>
-            <td>
-                <span class="res stone" style="padding-left:1em">&nbsp;</span>${thisVillageTotalStone}
-            </td>
-            <td>
-                <span class="res iron" style="padding-left:1em">&nbsp;</span>${thisVillageTotalIron}
-            </td>
-            <td style="text-align:right">${villagesData[i].warehouseCapacity}</td>
+        <tr>
+            <td style="font-weight:600">${villagesData[i].name}</td>
+            <td>${numberWithCommas(villagesData[i].points)}</td>
+            <td style="text-align:center">${thisMerchantLeft}/${villagesData[i].totalMerchants}</td>
+            <td><span class="wh-res-wood">${numberWithCommas(thisVillageTotalWood)}</span></td>
+            <td><span class="wh-res-clay">${numberWithCommas(thisVillageTotalStone)}</span></td>
+            <td><span class="wh-res-iron">${numberWithCommas(thisVillageTotalIron)}</span></td>
+            <td style="text-align:right;color:#64748b">${numberWithCommas(villagesData[i].warehouseCapacity)}</td>
         </tr>`;
     }
     resBalancedHTML += `</table></div>`;
