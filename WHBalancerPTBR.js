@@ -1,6 +1,6 @@
-// Script original por Sophie "Shinko to Kuma" — Tradução completa para PT-BR por Johnatan (OND BR143)
+// Balanceador de Armazém — Tradução PT-BR — OND BR143
 // Uso: javascript: $.getScript("URL_DO_SCRIPT");
-console.log("Última atualização: Tradução PT-BR — Baseado no script de 20 Março 2026 — Sophie 'Shinko to Kuma'");
+console.log("Balanceador de Armazém — Tradução PT-BR — OND BR143");
 
 var testPage;
 var is_mobile = !!navigator.userAgent.match(/iphone|android|blackberry/ig) || false;
@@ -81,7 +81,7 @@ var langShinko = [
     "Argila",                        // 5 - clay
     "Ferro",                         // 6 - iron
     "Enviar Recursos",               // 7 - send resources
-    "Criado por Sophie 'Shinko to Kuma' — Traduzido para PT-BR", // 8 - credits
+    "Balanceador de Armazém — OND BR143", // 8 - credits
     "Total de Madeira",              // 9 - total wood
     "Total de Argila",               // 10 - total clay
     "Total de Ferro",                // 11 - total iron
@@ -927,7 +927,7 @@ function displayEverything() {
                                 <td style="padding: 6px;">
                                 <input type="button" class="btn evt-confirm-btn btn-confirm-yes" value="Salvar" onclick="saveSettings();"/></td></tr>
                                 <td colspan="2" style="padding: 6px;">
-                                <p style="padding:5px"><font size="1">Script por Sophie "Shinko to Kuma" — Traduzido para PT-BR</font></p>
+                                <p style="padding:5px"><font size="1">Balanceador de Armazém — OND BR143</font></p>
                                 </td>
                                 </table>
                             </form>
