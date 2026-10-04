@@ -81,7 +81,7 @@ var langShinko = [
     "Argila",                        // 5 - clay
     "Ferro",                         // 6 - iron
     "Enviar",                        // 7 - send resources
-    "Balanceador de Armazém — OND BR143", // 8 - credits
+    "por Azuelos", // 8 - credits
     "Total de Madeira",              // 9 - total wood
     "Total de Argila",               // 10 - total clay
     "Total de Ferro",                // 11 - total iron
@@ -143,6 +143,27 @@ cssClassesSophie = `
     font-weight: 600;
     color: #fff;
     letter-spacing: 0.5px;
+}
+.wh-credit-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 16px;
+    background: rgba(0,0,0,0.2);
+    border-top: 1px solid rgba(255,255,255,0.04);
+    font-size: 11px;
+    color: #64748b;
+}
+.wh-credit-bar a {
+    color: #5eead4;
+    text-decoration: none;
+    font-weight: 600;
+    transition: color 0.2s;
+}
+.wh-credit-bar a:hover {
+    color: #99f6e4;
+    text-decoration: underline;
 }
 
 /* ===== CARDS DE RECURSOS (TOTAIS) ===== */
@@ -1178,7 +1199,7 @@ function displayEverything() {
                     <div class="wh-panel">
                         <div class="wh-title-bar">
                             <h2>⚖️ ${langShinko[0]}</h2>
-                            <span class="wh-badge">${villagesData.length} aldeias · OND BR143</span>
+                            <span class="wh-badge">${villagesData.length} aldeias · <a href="https://www.instagram.com/jhonatanazuelosoficial" target="_blank" style="color:#fff;text-decoration:none;border-bottom:1px dotted rgba(255,255,255,0.5)">por Azuelos</a></span>
                         </div>
 
                         ${totalsAndAverages}
@@ -1358,6 +1379,9 @@ function displayEverything() {
         <div class="wh-actions">
             <button type="button" class="wh-btn-action" onclick="showStats()">📊 Mostrar Excesso / Escassez</button>
             <button type="button" class="wh-btn-action" onclick="resAfterBalance()">📋 Resultado do Balanceamento</button>
+        </div>
+        <div class="wh-credit-bar">
+            ⚔️ Feito por <a href="https://www.instagram.com/jhonatanazuelosoficial" target="_blank">@Azuelos</a> · OND BR143
         </div>`);
         console.log("Finalizado");
     }
