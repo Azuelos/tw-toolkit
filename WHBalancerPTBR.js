@@ -19,7 +19,9 @@ var villageID = [];
 var allWoodObjects, allClayObjects, allIronObjects, allVillages;
 var totalsAndAverages = "";
 var incomingRes = {};
-var totalWood, totalStone, totalIron;
+var totalWood = 0, totalStone = 0, totalIron = 0;
+var woodAverage = 0, stoneAverage = 0, ironAverage = 0;
+var actualWoodAverage = 0, actualStoneAverage = 0, actualIronAverage = 0;
 var merchantOrders = [];
 var excessResources = [];
 var shortageResources = [];
@@ -27,6 +29,20 @@ var links = [];
 var cleanLinks = [];
 var stillShortage = [];
 var stillExcess = [];
+
+// Variáveis de Estado para Cunhagem Automática e Nivelamento Premium
+var whAutoMintRunning = false;
+var whAutoMintIndex = 0;
+var whAutoMintStats = { activated: 0, alreadyActive: 0, noAcademy: 0, errors: 0 };
+var whMerchantExchangeRunning = false;
+var whMerchantSelectedQueue = [];
+var whMerchantIndex = 0;
+var whMerchantStats = { success: 0, errors: 0, ppSpent: 0 };
+var whPremiumBuyRunning = false;
+var whPremiumBuySpent = 0;
+var whPremiumBuyBudget = 0;
+var whPremiumBuyQueue = [];
+var whPremiumBuyIndex = 0;
 
 function init() {
     warehouseCapacity = [];
@@ -51,6 +67,9 @@ function init() {
     cleanLinks = [];
     stillShortage = [];
     stillExcess = [];
+    whAutoMintRunning = false;
+    whMerchantExchangeRunning = false;
+    whPremiumBuyRunning = false;
 }
 
 function cleanup() {
@@ -898,6 +917,153 @@ table.wh-dialog-table tr:hover td { background: #1e3a5f !important; }
     padding: 8px 18px !important;
     font-weight: 800 !important;
 }
+
+/* ===== BOTÕES ESPECIAIS DA TOOLBAR ===== */
+.wh-btn-gold {
+    background: linear-gradient(135deg, #92400e 0%, #b45309 50%, #d97706 100%) !important;
+    border: 1px solid #f59e0b !important;
+    color: #ffffff !important;
+    box-shadow: 0 4px 14px rgba(217, 119, 6, 0.4) !important;
+}
+.wh-btn-gold:hover {
+    background: linear-gradient(135deg, #b45309 0%, #d97706 50%, #f59e0b 100%) !important;
+    border-color: #fde047 !important;
+    color: #ffffff !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 6px 20px rgba(217, 119, 6, 0.6) !important;
+}
+.wh-btn-diamond {
+    background: linear-gradient(135deg, #0369a1 0%, #0284c7 50%, #0ea5e9 100%) !important;
+    border: 1px solid #38bdf8 !important;
+    color: #ffffff !important;
+    box-shadow: 0 4px 14px rgba(14, 165, 233, 0.4) !important;
+}
+.wh-btn-diamond:hover {
+    background: linear-gradient(135deg, #0284c7 0%, #0ea5e9 50%, #38bdf8 100%) !important;
+    border-color: #bae6fd !important;
+    color: #ffffff !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 6px 20px rgba(14, 165, 233, 0.6) !important;
+}
+
+/* ===== BADGES DE STATUS ===== */
+.wh-status-badge {
+    padding: 4px 10px !important;
+    border-radius: 9999px !important;
+    font-size: 11px !important;
+    font-weight: 800 !important;
+    display: inline-block !important;
+    white-space: nowrap !important;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.8) !important;
+}
+.wh-status-badge.badge-success { background: #15803d !important; border: 1px solid #22c55e !important; color: #ffffff !important; }
+.wh-status-badge.badge-running { background: #065f46 !important; border: 1px solid #10b981 !important; color: #ffffff !important; }
+.wh-status-badge.badge-working { background: #854d0e !important; border: 1px solid #eab308 !important; color: #fef08a !important; }
+.wh-status-badge.badge-none { background: #334155 !important; border: 1px solid #64748b !important; color: #cbd5e1 !important; }
+.wh-status-badge.badge-error { background: #991b1b !important; border: 1px solid #ef4444 !important; color: #ffffff !important; }
+
+/* ===== CARDS INFORMATIVOS ===== */
+.wh-automint-info-card, .wh-premium-info-card {
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.85) 0%, rgba(15, 23, 42, 0.98) 100%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-radius: 12px !important;
+    padding: 14px 18px !important;
+    margin-bottom: 16px !important;
+    position: relative !important;
+}
+.wh-automint-info-card { border-left: 4px solid #f59e0b !important; }
+.wh-premium-info-card { border-left: 4px solid #38bdf8 !important; }
+
+.wh-automint-badge {
+    font-size: 10px !important;
+    font-weight: 900 !important;
+    color: #fde047 !important;
+    letter-spacing: 0.8px !important;
+    margin-bottom: 6px !important;
+}
+.wh-premium-badge {
+    font-size: 10px !important;
+    font-weight: 900 !important;
+    color: #7dd3fc !important;
+    letter-spacing: 0.8px !important;
+    margin-bottom: 6px !important;
+}
+.wh-automint-text, .wh-premium-text {
+    font-size: 12px !important;
+    line-height: 1.55 !important;
+    color: #f1f5f9 !important;
+    margin-bottom: 10px !important;
+}
+.wh-automint-meta, .wh-premium-meta {
+    display: flex !important;
+    gap: 16px !important;
+    font-size: 11px !important;
+    color: #cbd5e1 !important;
+    flex-wrap: wrap !important;
+}
+.wh-automint-meta strong, .wh-premium-meta strong {
+    color: #ffffff !important;
+}
+
+/* ===== GRIDS DE MÉTRICAS ===== */
+.wh-automint-metrics-grid, .wh-premium-metrics-grid {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 10px !important;
+    margin-bottom: 16px !important;
+}
+.wh-metric-box {
+    background: rgba(15, 23, 42, 0.9) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 8px !important;
+    padding: 10px !important;
+    text-align: center !important;
+}
+.wh-metric-box.metric-total { border-top: 3px solid #38bdf8 !important; }
+.wh-metric-box.metric-success { border-top: 3px solid #eab308 !important; }
+.wh-metric-box.metric-running { border-top: 3px solid #22c55e !important; }
+.wh-metric-box.metric-none { border-top: 3px solid #64748b !important; }
+.wh-metric-box.metric-pp { border-top: 3px solid #a855f7 !important; }
+
+.wh-metric-val {
+    font-size: 18px !important;
+    font-weight: 900 !important;
+    color: #ffffff !important;
+}
+.wh-metric-lbl {
+    font-size: 11px !important;
+    color: #94a3b8 !important;
+    font-weight: 600 !important;
+    margin-top: 2px !important;
+}
+
+/* ===== TABS NO MODAL PREMIUM ===== */
+.wh-tabs-nav {
+    display: flex !important;
+    gap: 8px !important;
+    border-bottom: 1px solid rgba(255,255,255,0.12) !important;
+    margin-bottom: 16px !important;
+}
+.wh-tab-btn {
+    background: transparent !important;
+    color: #94a3b8 !important;
+    border: none !important;
+    border-bottom: 2px solid transparent !important;
+    padding: 10px 18px !important;
+    font-size: 13px !important;
+    font-weight: 800 !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+}
+.wh-tab-btn.active {
+    color: #38bdf8 !important;
+    border-bottom-color: #38bdf8 !important;
+    background: rgba(56, 189, 248, 0.08) !important;
+    border-radius: 6px 6px 0 0 !important;
+}
+.wh-tab-btn:hover {
+    color: #ffffff !important;
+}
 </style>`;
 
 // Adicionando classes CSS à página
@@ -1527,6 +1693,8 @@ function displayEverything() {
                                     <button type="button" class="wh-btn-tool" onclick="toggleWhSettings(this)">⚙️ Configurações</button>
                                     <button type="button" class="wh-btn-tool" onclick="showStats()">📊 Escassez & Excesso</button>
                                     <button type="button" class="wh-btn-tool" onclick="resAfterBalance()">📋 Projeção Final</button>
+                                    <button type="button" class="wh-btn-tool wh-btn-gold" onclick="openWhAutoMintModal()" title="Ativar criação automática de moedas (8h contínuas) em todas as aldeias com academia">🪙 Cunhagem Automática</button>
+                                    <button type="button" class="wh-btn-tool wh-btn-diamond" onclick="openWhPremiumExchangeModal()" title="Nivelar recursos entre as aldeias usando compra na Troca Premium e Comerciante NPC">💎 Nivelamento Premium</button>
                                 </div>
                                 <div class="wh-toolbar-right">
                                     <div class="wh-hotkey-badge">⌨️ Pressione [ESPAÇO] ou [ENTER] para despachar!</div>
@@ -1964,3 +2132,655 @@ function resAfterBalance() {
     resBalancedHTML += `</tbody></table></div></div>`;
     Dialog.show('wh_res_after_balance', resBalancedHTML);
 }
+
+// =========================================================================
+// 🪙 1. MODAL E MOTOR DE CUNHAGEM AUTOMÁTICA EM MASSA (ACADEMIA 8H)
+// =========================================================================
+
+function openWhAutoMintModal() {
+    var totalVillages = villagesData.length;
+    var html = `
+    <div class="wh-modal-wrapper" style="max-width: 900px !important;">
+        <div class="wh-modal-header" style="background: linear-gradient(135deg, #1f1406 0%, #3b2207 50%, #1e293b 100%) !important; border-bottom: 2px solid #f59e0b !important;">
+            <div>
+                <div class="wh-modal-title" style="color: #fde68a !important;">🪙 Ativação em Massa — Criação Automática de Moedas</div>
+                <div class="wh-modal-subtitle">Tribal Wars BR143 · Ativação oficial na Academia (8 horas contínuas em segundo plano)</div>
+            </div>
+            <a href="https://www.instagram.com/jhonatanazuelosoficial" target="_blank" class="wh-modal-author">
+                📸 Criado por <strong>@jhonatanazuelosoficial</strong>
+            </a>
+        </div>
+        <div class="wh-modal-body" style="padding: 20px !important; background: #070d19 !important;">
+            <div class="wh-automint-info-card">
+                <div class="wh-automint-badge">ℹ️ RECURSO OFICIAL DA ACADEMIA</div>
+                <div class="wh-automint-text">
+                    <strong>Criação automática:</strong> Quando ativada, a disponibilidade de recursos nesta aldeia será usada para cunhar moedas de ouro.
+                    Assim que houver recursos suficientes para uma moeda de ouro, ela será cunhada automaticamente.
+                    Você pode cancelar o processo a qualquer momento.
+                </div>
+                <div class="wh-automint-meta">
+                    <span>⏱️ <strong>Duração:</strong> Até 8 horas contínuas</span>
+                    <span>💰 <strong>Custo:</strong> 100% Gratuito (0 PP)</span>
+                    <span>🏰 <strong>Aldeias no Grupo:</strong> <strong>${totalVillages}</strong></span>
+                </div>
+            </div>
+
+            <!-- Resumo e Métricas -->
+            <div class="wh-automint-metrics-grid">
+                <div class="wh-metric-box metric-total">
+                    <div class="wh-metric-val" id="whMintTotalVal">${totalVillages}</div>
+                    <div class="wh-metric-lbl">Total de Aldeias</div>
+                </div>
+                <div class="wh-metric-box metric-success">
+                    <div class="wh-metric-val" id="whMintSuccessVal">0</div>
+                    <div class="wh-metric-lbl">⚡ Ativadas Agora</div>
+                </div>
+                <div class="wh-metric-box metric-running">
+                    <div class="wh-metric-val" id="whMintActiveVal">0</div>
+                    <div class="wh-metric-lbl">🟢 Já Ativas</div>
+                </div>
+                <div class="wh-metric-box metric-none">
+                    <div class="wh-metric-val" id="whMintNoAcadVal">0</div>
+                    <div class="wh-metric-lbl">🏛️ Sem Academia</div>
+                </div>
+            </div>
+
+            <!-- Barra de Progresso -->
+            <div class="wh-progress-box" style="margin: 16px 0 !important;">
+                <div style="display:flex; justify-content:space-between; margin-bottom: 6px; font-size:12px; font-weight:700; color:#e2e8f0;">
+                    <span id="whMintProgressLabel">Pronto para iniciar verificação</span>
+                    <span id="whMintProgressPercent">0%</span>
+                </div>
+                <div class="wh-progress-track" style="border-radius:6px; height:8px;">
+                    <div class="wh-progress-fill" id="whMintProgressBar" style="width: 0%; background: linear-gradient(90deg, #f59e0b, #fbbf24, #22c55e) !important;"></div>
+                </div>
+            </div>
+
+            <!-- Botões de Ação -->
+            <div style="display: flex; gap: 12px; justify-content: center; margin-bottom: 18px;">
+                <button type="button" class="wh-btn-gold" id="whBtnRunAutoMint" style="padding: 11px 24px; font-size: 13px;" onclick="startWhAutoMintProcess()">
+                    🚀 Iniciar Ativação em Todas as ${totalVillages} Aldeias
+                </button>
+                <button type="button" class="wh-btn-tool" id="whBtnCancelAutoMint" style="display:none; padding: 11px 20px; font-size: 13px;" onclick="stopWhAutoMintProcess()">
+                    ⏹️ Parar Processo
+                </button>
+            </div>
+
+            <!-- Tabela de Log ao Vivo -->
+            <div style="max-height: 280px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
+                <table class="wh-dialog-table" id="whMintLogTable">
+                    <thead>
+                        <tr>
+                            <th style="width: 45px; text-align: center;">#</th>
+                            <th class="wh-th-village">Aldeia</th>
+                            <th style="width: 140px; text-align: center;">Status</th>
+                            <th>Detalhes / Sessão</th>
+                        </tr>
+                    </thead>
+                    <tbody id="whMintLogBody">
+                        <tr><td colspan="4" style="text-align:center; padding:18px; color:#94a3b8;">Clique em "Iniciar Ativação" para verificar e ativar a cunhagem automática em cada aldeia.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>`;
+    Dialog.show("wh_auto_mint_dialog", html);
+}
+
+function stopWhAutoMintProcess() {
+    whAutoMintRunning = false;
+    $("#whBtnCancelAutoMint").hide();
+    $("#whBtnRunAutoMint").show().text("🚀 Retomar Ativação");
+    $("#whMintProgressLabel").text("Processo pausado pelo jogador.");
+}
+
+function startWhAutoMintProcess() {
+    if (whAutoMintRunning) return;
+    whAutoMintRunning = true;
+    $("#whBtnRunAutoMint").hide();
+    $("#whBtnCancelAutoMint").show();
+
+    whAutoMintStats = { activated: 0, alreadyActive: 0, noAcademy: 0, errors: 0 };
+    $("#whMintSuccessVal").text("0");
+    $("#whMintActiveVal").text("0");
+    $("#whMintNoAcadVal").text("0");
+    $("#whMintLogBody").empty();
+
+    whAutoMintIndex = 0;
+    processNextAutoMintVillage();
+}
+
+function processNextAutoMintVillage() {
+    if (!whAutoMintRunning) return;
+    if (whAutoMintIndex >= villagesData.length) {
+        whAutoMintRunning = false;
+        $("#whBtnCancelAutoMint").hide();
+        $("#whBtnRunAutoMint").show().text("✅ Ativação Concluída").css("background", "#15803d");
+        $("#whMintProgressLabel").text(`🎉 Finalizado! ${whAutoMintStats.activated} ativadas, ${whAutoMintStats.alreadyActive} já ativas, ${whAutoMintStats.noAcademy} sem academia.`);
+        $("#whMintProgressBar").css("width", "100%");
+        $("#whMintProgressPercent").text("100%");
+        UI.SuccessMessage(`✅ Cunhagem automática finalizada! ${whAutoMintStats.activated} aldeias ativadas.`);
+        return;
+    }
+
+    var v = villagesData[whAutoMintIndex];
+    var currentNr = whAutoMintIndex + 1;
+    var total = villagesData.length;
+    var pct = Math.round((currentNr / total) * 100);
+
+    $("#whMintProgressBar").css("width", pct + "%");
+    $("#whMintProgressPercent").text(pct + "%");
+    $("#whMintProgressLabel").text(`Verificando aldeia ${currentNr} de ${total}: ${v.name}...`);
+
+    var rowId = "whMintRow_" + v.id;
+    $("#whMintLogBody").prepend(`
+        <tr id="${rowId}">
+            <td style="text-align:center; color:#94a3b8;">${currentNr}</td>
+            <td class="wh-td-village"><strong>${v.name}</strong></td>
+            <td style="text-align:center;"><span class="wh-status-badge badge-working">⏳ Verificando...</span></td>
+            <td style="color:#cbd5e1; font-size:11px;">Consultando Academia...</td>
+        </tr>
+    `);
+
+    $.get('/game.php?village=' + v.id + '&screen=snob')
+        .done(function(html) {
+            if (!whAutoMintRunning) return;
+            var docStr = typeof html === "string" ? html : "";
+            
+            // 1. Verificar se possui academia construída
+            var hasSnob = docStr.indexOf('auto-minting') > -1 ||
+                          docStr.indexOf('cancel_auto_minting_session') > -1 ||
+                          docStr.indexOf('start_auto_minting_session') > -1 ||
+                          docStr.indexOf('gold-overview') > -1;
+
+            if (!hasSnob) {
+                whAutoMintStats.noAcademy++;
+                $("#whMintNoAcadVal").text(whAutoMintStats.noAcademy);
+                $(`#${rowId} td:nth-child(3)`).html('<span class="wh-status-badge badge-none">🏛️ Sem Academia</span>');
+                $(`#${rowId} td:nth-child(4)`).html('<span style="color:#94a3b8;">Edifício não construído ou indisponível</span>');
+            } else {
+                // 2. Verificar se já está ativa
+                var isAlreadyRunning = docStr.indexOf('auto-minting-status') > -1 &&
+                                       (docStr.indexOf('cancel_auto_minting_session') > -1 ||
+                                        docStr.indexOf('title="Ativo"') > -1 ||
+                                        docStr.indexOf('class="running') > -1 ||
+                                        docStr.indexOf('Cancelar') > -1);
+
+                if (isAlreadyRunning) {
+                    whAutoMintStats.alreadyActive++;
+                    $("#whMintActiveVal").text(whAutoMintStats.alreadyActive);
+                    var mCoins = docStr.match(/coletado at[ée] agora:\s*(\d+)/i);
+                    var mEnd = docStr.match(/Fim:\s*([^<]+)/i);
+                    var info = "Sessão já em andamento";
+                    if (mCoins) info += ` (${mCoins[1]} moedas)`;
+                    if (mEnd) info += ` · Término: ${mEnd[1].trim()}`;
+                    $(`#${rowId} td:nth-child(3)`).html('<span class="wh-status-badge badge-running">🟢 Já Ativa</span>');
+                    $(`#${rowId} td:nth-child(4)`).html(`<span style="color:#86efac;">${info}</span>`);
+                } else {
+                    // 3. Ativar sessão de cunhagem automática
+                    var $temp = $('<div>').html(docStr);
+                    var $form = $temp.find('form[action*="start_auto_minting_session"], .auto-minting form');
+                    var targetUrl = $form.length && $form.attr('action') ? $form.attr('action') : `/game.php?village=${v.id}&screen=snob&action=start_auto_minting_session&h=${game_data.csrf || csrf_token}`;
+                    var postPayload = $form.length ? $form.serialize() : { h: game_data.csrf || csrf_token };
+
+                    $.post(targetUrl, postPayload)
+                        .done(function() {
+                            whAutoMintStats.activated++;
+                            $("#whMintSuccessVal").text(whAutoMintStats.activated);
+                            $(`#${rowId} td:nth-child(3)`).html('<span class="wh-status-badge badge-success">⚡ Ativada</span>');
+                            $(`#${rowId} td:nth-child(4)`).html('<span style="color:#fde047; font-weight:700;">✅ Sessão de 8h iniciada com sucesso!</span>');
+                        })
+                        .fail(function() {
+                            whAutoMintStats.errors++;
+                            $(`#${rowId} td:nth-child(3)`).html('<span class="wh-status-badge badge-error">❌ Erro</span>');
+                            $(`#${rowId} td:nth-child(4)`).html('<span style="color:#f87171;">Falha na requisição de ativação</span>');
+                        });
+                }
+            }
+        })
+        .fail(function() {
+            whAutoMintStats.errors++;
+            $(`#${rowId} td:nth-child(3)`).html('<span class="wh-status-badge badge-error">❌ Falha</span>');
+            $(`#${rowId} td:nth-child(4)`).html('<span style="color:#f87171;">Erro de rede ao conectar à aldeia</span>');
+        })
+        .always(function() {
+            whAutoMintIndex++;
+            setTimeout(processNextAutoMintVillage, 280);
+        });
+}
+
+
+// =========================================================================
+// 💎 2. MODAL E MOTOR DE EQUILÍBRIO & NIVELAMENTO PREMIUM DE RECURSOS
+// =========================================================================
+
+function openWhPremiumExchangeModal() {
+    var userPP = parseInt(game_data.player.pp) || 0;
+    var totalVillages = villagesData.length;
+    var maxTradesPossible = Math.floor(userPP / 10);
+
+    // Calcular candidatos a nivelamento com Comerciante NPC
+    var merchantCandidates = [];
+    for (var i = 0; i < villagesData.length; i++) {
+        var v = villagesData[i];
+        var w = parseInt(v.wood) || 0;
+        var s = parseInt(v.stone) || 0;
+        var ir = parseInt(v.iron) || 0;
+        var total = w + s + ir;
+        var targetEach = Math.floor(total / 3);
+
+        // Identificar o recurso com maior excesso e maior falta
+        var resList = [
+            { type: 'wood', name: 'Madeira', icon: '🪵', amount: w, diff: w - targetEach },
+            { type: 'stone', name: 'Argila', icon: '🧱', amount: s, diff: s - targetEach },
+            { type: 'iron', name: 'Ferro', icon: '⛏️', amount: ir, diff: ir - targetEach }
+        ];
+
+        resList.sort(function(a, b) { return b.diff - a.diff; });
+        var excessRes = resList[0]; // Maior excesso
+        var deficitRes = resList[2]; // Maior falta
+
+        var tradeAmount = Math.min(excessRes.diff, Math.abs(deficitRes.diff));
+        var disparity = excessRes.amount - deficitRes.amount;
+
+        if (disparity >= 10000 && tradeAmount >= 5000) {
+            merchantCandidates.push({
+                village: v,
+                excess: excessRes,
+                deficit: deficitRes,
+                tradeAmount: tradeAmount,
+                disparity: disparity
+            });
+        }
+    }
+
+    merchantCandidates.sort(function(a, b) { return b.disparity - a.disparity; });
+
+    // Calcular candidatos a compra na Troca Premium (Bolsa)
+    var deficitCandidates = [];
+    for (var i = 0; i < villagesData.length; i++) {
+        var v = villagesData[i];
+        var wShort = Math.max(0, (actualWoodAverage || woodAverage) - (parseInt(v.wood) || 0));
+        var sShort = Math.max(0, (actualStoneAverage || stoneAverage) - (parseInt(v.stone) || 0));
+        var iShort = Math.max(0, (actualIronAverage || ironAverage) - (parseInt(v.iron) || 0));
+        var totalDef = wShort + sShort + iShort;
+        if (totalDef > 8000) {
+            deficitCandidates.push({
+                village: v,
+                wShort: wShort,
+                sShort: sShort,
+                iShort: iShort,
+                totalDef: totalDef
+            });
+        }
+    }
+    deficitCandidates.sort(function(a, b) { return b.totalDef - a.totalDef; });
+
+    var html = `
+    <div class="wh-modal-wrapper" style="max-width: 960px !important;">
+        <div class="wh-modal-header" style="background: linear-gradient(135deg, #082f49 0%, #0c4a6e 50%, #1e293b 100%) !important; border-bottom: 2px solid #38bdf8 !important;">
+            <div>
+                <div class="wh-modal-title" style="color: #7dd3fc !important;">💎 Nivelamento & Equilíbrio Premium de Recursos</div>
+                <div class="wh-modal-subtitle">Tribal Wars BR143 · Nivelamento instantâneo com Pontos Premium e Troca Oficial</div>
+            </div>
+            <a href="https://www.instagram.com/jhonatanazuelosoficial" target="_blank" class="wh-modal-author">
+                📸 Criado por <strong>@jhonatanazuelosoficial</strong>
+            </a>
+        </div>
+        <div class="wh-modal-body" style="padding: 20px !important; background: #070d19 !important;">
+            
+            <!-- Banner de Saldo e Informações -->
+            <div class="wh-premium-info-card">
+                <div class="wh-premium-badge">💎 SALDO PREMIUM & CONTROLE DE EQUILÍBRIO</div>
+                <div class="wh-premium-text">
+                    Nivele os recursos das suas aldeias gastando Pontos Premium de forma ultra otimizada.
+                    Você pode equalizar internamente os estoques (1:1:1) com o <strong>Comerciante NPC (10 PP/aldeia)</strong> ou comprar diretamente da <strong>Troca Premium (Bolsa do Mercado)</strong> para socorrer aldeias em déficit.
+                </div>
+                <div class="wh-premium-meta">
+                    <span>💰 <strong>Pontos Premium Disponíveis:</strong> <span style="color:#fde047; font-weight:900;">${userPP} PP</span></span>
+                    <span>🏰 <strong>Aldeias no Grupo:</strong> <strong>${totalVillages}</strong></span>
+                    <span>⚡ <strong>Trocas NPC Possíveis:</strong> <strong style="color:#38bdf8;">${maxTradesPossible} aldeias</strong></span>
+                </div>
+            </div>
+
+            <!-- Navegação de Abas -->
+            <div class="wh-tabs-nav">
+                <button type="button" class="wh-tab-btn active" id="whTabBtnMerch" onclick="switchWhPremiumTab('merch')">
+                    ⚖️ Comerciante NPC (10 PP / aldeia) [${merchantCandidates.length} Candidatas]
+                </button>
+                <button type="button" class="wh-tab-btn" id="whTabBtnExchange" onclick="switchWhPremiumTab('exchange')">
+                    🛒 Troca Premium (Bolsa de Recursos) [${deficitCandidates.length} em Déficit]
+                </button>
+            </div>
+
+            <!-- ABA 1: COMERCIANTE NPC -->
+            <div id="whPremiumTabContent_merch">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+                    <div style="font-size:12px; color:#cbd5e1;">
+                        Aldeias com desnível interno relevante. Marcadas automaticamente até o seu limite de PP.
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <button type="button" class="wh-btn-tool" style="font-size:11px; padding:6px 12px;" onclick="toggleAllMerchantChecks(true)">Marcar Todas</button>
+                        <button type="button" class="wh-btn-tool" style="font-size:11px; padding:6px 12px;" onclick="toggleAllMerchantChecks(false)">Desmarcar</button>
+                        <button type="button" class="wh-btn-diamond" id="whBtnExecMerch" style="font-size:12px; padding:8px 18px;" onclick="runMerchantExchange()">
+                            ⚡ Executar Nivelamento NPC
+                        </button>
+                    </div>
+                </div>
+
+                <div style="max-height: 350px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
+                    <table class="wh-dialog-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 40px; text-align: center;"><input type="checkbox" id="whMerchMasterChk" onchange="toggleAllMerchantChecks(this.checked)" checked></th>
+                                <th class="wh-th-village">Aldeia</th>
+                                <th>Estoque Atual</th>
+                                <th>Troca Sugerida (1:1)</th>
+                                <th style="width: 80px; text-align: center;">Custo</th>
+                                <th style="width: 130px; text-align: center;">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="whMerchTableBody">`;
+
+    if (merchantCandidates.length === 0) {
+        html += `<tr><td colspan="6" style="text-align:center; padding:24px; color:#4ade80; font-weight:700;">✅ Todas as suas aldeias estão com recursos perfeitamente nivelados!</td></tr>`;
+    } else {
+        var autoCheckedLimit = Math.min(merchantCandidates.length, maxTradesPossible);
+        for (var i = 0; i < merchantCandidates.length; i++) {
+            var c = merchantCandidates[i];
+            var isChecked = i < autoCheckedLimit ? 'checked' : '';
+            var rowId = "whMerchRow_" + c.village.id;
+            html += `
+            <tr id="${rowId}">
+                <td style="text-align: center;">
+                    <input type="checkbox" class="wh-merch-chk" data-vid="${c.village.id}" data-sell="${c.excess.type}" data-buy="${c.deficit.type}" data-amount="${c.tradeAmount}" data-name="${c.village.name}" ${isChecked}>
+                </td>
+                <td class="wh-td-village"><strong>${c.village.name}</strong></td>
+                <td style="font-size: 11px; font-variant-numeric: tabular-nums;">
+                    <span style="color:#4ade80;">🪵 ${numberWithCommas(c.village.wood)}</span> · 
+                    <span style="color:#fb923c;">🧱 ${numberWithCommas(c.village.stone)}</span> · 
+                    <span style="color:#93c5fd;">⛏️ ${numberWithCommas(c.village.iron)}</span>
+                </td>
+                <td style="font-size: 12px; font-weight: 700; color:#fde047;">
+                    Dar ${c.excess.icon} ${numberWithCommas(c.tradeAmount)} por ${c.deficit.icon} ${numberWithCommas(c.tradeAmount)}
+                </td>
+                <td style="text-align: center;"><span class="wh-merch-badge">10 PP</span></td>
+                <td style="text-align: center;"><span class="wh-status-badge badge-working">Pendente</span></td>
+            </tr>`;
+        }
+    }
+
+    html += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ABA 2: TROCA PREMIUM (BOLSA) -->
+            <div id="whPremiumTabContent_exchange" style="display:none;">
+                <div style="background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 16px; margin-bottom: 16px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                        <div>
+                            <label style="font-size:12px; font-weight:800; color:#38bdf8; text-transform:uppercase; letter-spacing:0.5px;">
+                                🎯 Orçamento Máximo de Pontos Premium:
+                            </label>
+                            <div style="font-size:11px; color:#94a3b8; margin-top:2px;">
+                                O script distribuirá este saldo comprando recursos nas aldeias com maior escassez
+                            </div>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <input type="number" id="whPremiumBudgetInput" min="1" max="${userPP}" value="${Math.min(userPP, 100)}" style="background:#020617; color:#fde047; border:1px solid #38bdf8; border-radius:6px; padding:6px 10px; font-weight:800; font-size:14px; width:100px; text-align:center;">
+                            <span style="font-weight:800; color:#ffffff;">PP</span>
+                            <button type="button" class="wh-btn-tool" style="font-size:11px; padding:6px 10px;" onclick="$('#whPremiumBudgetInput').val(50)">50 PP</button>
+                            <button type="button" class="wh-btn-tool" style="font-size:11px; padding:6px 10px;" onclick="$('#whPremiumBudgetInput').val(100)">100 PP</button>
+                            <button type="button" class="wh-btn-tool" style="font-size:11px; padding:6px 10px;" onclick="$('#whPremiumBudgetInput').val(250)">250 PP</button>
+                            <button type="button" class="wh-btn-tool" style="font-size:11px; padding:6px 10px;" onclick="$('#whPremiumBudgetInput').val(${userPP})">Máximo (${userPP})</button>
+                            <button type="button" class="wh-btn-diamond" id="whBtnExecPremiumBuy" style="font-size:12px; padding:8px 18px;" onclick="executePremiumExchangeBuy()">
+                                🛒 Iniciar Compras na Bolsa
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="max-height: 320px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
+                    <table class="wh-dialog-table">
+                        <thead>
+                            <tr>
+                                <th class="wh-th-village">Aldeia</th>
+                                <th class="wh-th-wood">🪵 Falta Madeira</th>
+                                <th class="wh-th-clay">🧱 Falta Argila</th>
+                                <th class="wh-th-iron">⛏️ Falta Ferro</th>
+                                <th style="text-align: right;">Déficit Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+
+    if (deficitCandidates.length === 0) {
+        html += `<tr><td colspan="5" style="text-align:center; padding:24px; color:#4ade80; font-weight:700;">✅ Nenhuma aldeia com déficit crítico encontrado!</td></tr>`;
+    } else {
+        for (var i = 0; i < deficitCandidates.length; i++) {
+            var d = deficitCandidates[i];
+            html += `
+            <tr>
+                <td class="wh-td-village"><strong>${d.village.name}</strong></td>
+                <td class="wh-td-wood">${d.wShort > 0 ? '<span class="wh-badge-shortage">🪵 -' + numberWithCommas(d.wShort) + '</span>' : '—'}</td>
+                <td class="wh-td-clay">${d.sShort > 0 ? '<span class="wh-badge-shortage">🧱 -' + numberWithCommas(d.sShort) + '</span>' : '—'}</td>
+                <td class="wh-td-iron">${d.iShort > 0 ? '<span class="wh-badge-shortage">⛏️ -' + numberWithCommas(d.iShort) + '</span>' : '—'}</td>
+                <td style="text-align: right; font-weight: 800; color: #f87171;">📦 -${numberWithCommas(d.totalDef)}</td>
+            </tr>`;
+        }
+    }
+
+    html += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </div>`;
+    Dialog.show("wh_premium_exchange_dialog", html);
+}
+
+function switchWhPremiumTab(tab) {
+    if (tab === 'merch') {
+        $("#whTabBtnMerch").addClass("active");
+        $("#whTabBtnExchange").removeClass("active");
+        $("#whPremiumTabContent_merch").show();
+        $("#whPremiumTabContent_exchange").hide();
+    } else {
+        $("#whTabBtnExchange").addClass("active");
+        $("#whTabBtnMerch").removeClass("active");
+        $("#whPremiumTabContent_exchange").show();
+        $("#whPremiumTabContent_merch").hide();
+    }
+}
+
+function toggleAllMerchantChecks(state) {
+    $(".wh-merch-chk").prop("checked", state);
+    $("#whMerchMasterChk").prop("checked", state);
+}
+
+function runMerchantExchange() {
+    var selected = [];
+    $(".wh-merch-chk:checked").each(function() {
+        var vId = $(this).data("vid");
+        var sellRes = $(this).data("sell");
+        var buyRes = $(this).data("buy");
+        var amount = parseInt($(this).data("amount"));
+        var name = $(this).data("name");
+        selected.push({ id: vId, sell: sellRes, buy: buyRes, amount: amount, name: name });
+    });
+
+    if (selected.length === 0) {
+        UI.ErrorMessage("Selecione ao menos uma aldeia para realizar a troca com o comerciante.");
+        return;
+    }
+
+    var totalCost = selected.length * 10;
+    var userPP = parseInt(game_data.player.pp) || 0;
+    if (userPP < totalCost) {
+        var possibleCount = Math.floor(userPP / 10);
+        if (possibleCount === 0) {
+            UI.ErrorMessage(`Você não possui Pontos Premium suficientes (necessário 10 PP, disponível: ${userPP} PP).`);
+            return;
+        }
+        if (!confirm(`Você selecionou ${selected.length} trocas (${totalCost} PP), mas possui ${userPP} PP. Deseja executar as primeiras ${possibleCount} aldeias possíveis?`)) {
+            return;
+        }
+        selected = selected.slice(0, possibleCount);
+    } else {
+        if (!confirm(`Confirmar nivelamento de ${selected.length} aldeias via Comerciante NPC?\nCusto total: ${selected.length * 10} Pontos Premium (10 PP/aldeia).`)) {
+            return;
+        }
+    }
+
+    whMerchantExchangeRunning = true;
+    whMerchantSelectedQueue = selected;
+    whMerchantIndex = 0;
+    whMerchantStats = { success: 0, errors: 0, ppSpent: 0 };
+
+    $("#whBtnExecMerch").prop("disabled", true).text("⏳ Executando...");
+    processNextMerchantTrade();
+}
+
+function processNextMerchantTrade() {
+    if (!whMerchantExchangeRunning || whMerchantIndex >= whMerchantSelectedQueue.length) {
+        whMerchantExchangeRunning = false;
+        $("#whBtnExecMerch").prop("disabled", false).text("⚡ Executar Nivelamento NPC");
+        UI.SuccessMessage(`✅ Nivelamento concluído! ${whMerchantStats.success} aldeias niveladas (${whMerchantStats.ppSpent} PP gastos).`);
+        return;
+    }
+
+    var item = whMerchantSelectedQueue[whMerchantIndex];
+    var rowId = "whMerchRow_" + item.id;
+    $(`#${rowId} td:last-child`).html('<span class="wh-status-badge badge-working">⏳ Trocando...</span>');
+
+    var postUrl = `/game.php?village=${item.id}&screen=market&mode=other_offer&action=merchantexchange&h=${game_data.csrf || csrf_token}`;
+    var postData = {
+        res_buy: item.buy,
+        res_sell: item.sell,
+        sell: item.amount
+    };
+
+    $.post(postUrl, postData)
+        .done(function() {
+            whMerchantStats.success++;
+            whMerchantStats.ppSpent += 10;
+            $(`#${rowId} td:last-child`).html('<span class="wh-status-badge badge-success">✅ Nivelada (10 PP)</span>');
+        })
+        .fail(function() {
+            whMerchantStats.errors++;
+            $(`#${rowId} td:last-child`).html('<span class="wh-status-badge badge-error">❌ Erro</span>');
+        })
+        .always(function() {
+            whMerchantIndex++;
+            setTimeout(processNextMerchantTrade, 320);
+        });
+}
+
+function executePremiumExchangeBuy() {
+    var budgetPP = parseInt($("#whPremiumBudgetInput").val()) || 0;
+    var userPP = parseInt(game_data.player.pp) || 0;
+    if (budgetPP <= 0) {
+        UI.ErrorMessage("Defina uma quantidade válida de Pontos Premium a utilizar.");
+        return;
+    }
+    if (budgetPP > userPP) {
+        UI.ErrorMessage(`Você não possui Pontos Premium suficientes (Disponível: ${userPP} PP).`);
+        return;
+    }
+
+    var deficitList = [];
+    for (var i = 0; i < villagesData.length; i++) {
+        var v = villagesData[i];
+        var wShort = Math.max(0, (actualWoodAverage || woodAverage) - parseInt(v.wood));
+        var sShort = Math.max(0, (actualStoneAverage || stoneAverage) - parseInt(v.stone));
+        var iShort = Math.max(0, (actualIronAverage || ironAverage) - parseInt(v.iron));
+        var totalDeficit = wShort + sShort + iShort;
+        if (totalDeficit > 5000) {
+            deficitList.push({ village: v, wShort: wShort, sShort: sShort, iShort: iShort, totalDeficit: totalDeficit });
+        }
+    }
+
+    deficitList.sort(function(a, b) { return b.totalDeficit - a.totalDeficit; });
+
+    if (deficitList.length === 0) {
+        UI.SuccessMessage("Todas as aldeias já estão no patamar balanceado de recursos!");
+        return;
+    }
+
+    if (!confirm(`Deseja iniciar as compras na Troca Premium para socorrer as aldeias com maior escassez até o limite de ${budgetPP} PP?`)) {
+        return;
+    }
+
+    whPremiumBuyRunning = true;
+    whPremiumBuyBudget = budgetPP;
+    whPremiumBuySpent = 0;
+    whPremiumBuyQueue = deficitList;
+    whPremiumBuyIndex = 0;
+
+    $("#whBtnExecPremiumBuy").prop("disabled", true).text("⏳ Comprando...");
+    processNextPremiumBuy();
+}
+
+function processNextPremiumBuy() {
+    if (!whPremiumBuyRunning || whPremiumBuySpent >= whPremiumBuyBudget || whPremiumBuyIndex >= whPremiumBuyQueue.length) {
+        whPremiumBuyRunning = false;
+        $("#whBtnExecPremiumBuy").prop("disabled", false).text("🛒 Comprar Recursos na Bolsa");
+        UI.SuccessMessage(`✅ Compras na Troca Premium finalizadas! Total gasto: ${whPremiumBuySpent} PP.`);
+        return;
+    }
+
+    var item = whPremiumBuyQueue[whPremiumBuyIndex];
+    var v = item.village;
+
+    var resType = "stone";
+    var maxNeed = item.sShort;
+    if (item.wShort > maxNeed) { resType = "wood"; maxNeed = item.wShort; }
+    if (item.iShort > maxNeed) { resType = "iron"; maxNeed = item.iShort; }
+
+    var buyAmount = Math.min(maxNeed, 10000);
+    if (buyAmount < 500) {
+        whPremiumBuyIndex++;
+        processNextPremiumBuy();
+        return;
+    }
+
+    var beginData = { h: game_data.csrf || csrf_token };
+    beginData["buy_" + resType] = buyAmount;
+
+    TribalWars.post("market", { ajaxaction: "exchange_begin", village: v.id }, beginData, function(r) {
+        if (!r || !r[0] || r[0].error) {
+            whPremiumBuyIndex++;
+            setTimeout(processNextPremiumBuy, 300);
+            return;
+        }
+
+        var rateHash = r[0].rate_hash;
+        var actualAmount = r[0].amount;
+        var costPP = r[0].cost || 1;
+
+        if (whPremiumBuySpent + costPP > whPremiumBuyBudget) {
+            whPremiumBuyRunning = false;
+            $("#whBtnExecPremiumBuy").prop("disabled", false).text("🛒 Comprar Recursos na Bolsa");
+            UI.SuccessMessage(`Limite de PP atingido (${whPremiumBuySpent} PP gastos).`);
+            return;
+        }
+
+        var confirmData = {
+            mb: 1,
+            h: game_data.csrf || csrf_token
+        };
+        confirmData["buy_" + resType] = actualAmount;
+        confirmData["rate_" + resType] = rateHash;
+
+        TribalWars._ah = { TribalWarsTE: 1 };
+        TribalWars.post("market", { ajaxaction: "exchange_confirm", village: v.id }, confirmData, function(res) {
+            whPremiumBuySpent += costPP;
+            whPremiumBuyIndex++;
+            setTimeout(processNextPremiumBuy, 350);
+        });
+    });
+}
+
