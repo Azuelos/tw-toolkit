@@ -18,12 +18,9 @@ Toolkit em JavaScript (Client-side / Userscript / Quickbar) para o jogo Tribal W
 
 ### Póquer de Cerco AI (Siege Poker Optimizer):
 ```javascript
-javascript:(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/gh/Azuelos/tw-toolkit@main/SiegePokerPTBR.js?_='+Date.now();document.head.appendChild(s);})();void(0);
+javascript:(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/gh/Azuelos/tw-toolkit@v1.2.2/SiegePokerPTBR.js';document.head.appendChild(s);})();void(0);
 ```
-*Ou formato alternativo via jQuery:*
-```javascript
-javascript:$.getScript("https://cdn.jsdelivr.net/gh/Azuelos/tw-toolkit@main/SiegePokerPTBR.js");void(0);
-```
+> ⚠️ **Nota CSP:** Nunca utilize `$.getScript()`, pois o jQuery invoca `eval()` internamente e é bloqueado pela Content Security Policy da InnoGames. O formato acima com `document.createElement('script')` é 100% à prova de CSP.
 
 ### Fusão de Relíquias Inteligente (Relic Fusion Optimizer):
 ```javascript
