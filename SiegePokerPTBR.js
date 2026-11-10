@@ -1,7 +1,7 @@
 // ===========================================================================
 // 🏰 Póquer de Cerco AI — Assistente Tático & Otimizador de Mãos e Descarte
 // Evento "Póquer de Cerco" (Siege Poker) — Tribal Wars BR143
-// Versão: 1.2.1 (Piloto Automático Mãos Livres) (Edição Oficial TW Toolkit)
+// Versão: 1.2.2 (Piloto Automático Mãos Livres) (Edição Oficial TW Toolkit)
 // Desenvolvido por: Azuelos (@jhonatanazuelosoficial)
 //
 // Uso na Barra de Acesso Rápido do Tribal Wars:
@@ -21,7 +21,7 @@
     }
 
     const SCRIPT_NAME = 'Póquer de Cerco AI';
-    const SCRIPT_VERSION = 'v1.2.1';
+    const SCRIPT_VERSION = 'v1.2.2';
     const STORAGE_KEY = 'ond_tw_siege_poker_prefs';
 
     // Definição e Constantes Oficiais do Jogo
@@ -127,18 +127,13 @@
     }
 
     function isBattleScreen() {
-        const attackBtn = document.getElementById('btn_attack');
-        const hand = document.getElementById('hand_cards');
-        return Boolean((attackBtn && attackBtn.offsetParent !== null) || (hand && hand.offsetParent !== null));
+        return Boolean(document.getElementById('btn_attack') || document.getElementById('hand_cards'));
     }
 
     function isFlagShopActive() {
         // Se a tela de batalha com botão de ataque ou cartas estiver presente, JAMAIS é Flag Shop
         if (isBattleScreen()) return false;
-
-        const startBtn = document.getElementById('btn_start_battle');
-        const flagOffers = document.getElementById('flag_shop_offer_slot_1');
-        return Boolean((startBtn && startBtn.offsetParent !== null) || (flagOffers && flagOffers.offsetParent !== null));
+        return Boolean(document.getElementById('btn_start_battle'));
     }
 
     /**
@@ -543,6 +538,9 @@
         const cardElements = document.querySelectorAll('#hand_cards .card, .hand-cards .card, [id^="card_slot_"]');
         const seenSlots = new Set();
 
+        const toUnselect = [];
+        const toSelect = [];
+
         cardElements.forEach(el => {
             if (el.id && seenSlots.has(el.id)) return;
             if (el.id) seenSlots.add(el.id);
@@ -557,12 +555,19 @@
 
             const key = `${suit.toLowerCase()}_${rank.toLowerCase()}`;
             const isSelected = el.classList.contains('card-selected');
-            if (targetKeys.has(key) && !isSelected) {
-                el.click();
-            } else if (!targetKeys.has(key) && isSelected) {
-                el.click();
+
+            if (!targetKeys.has(key) && isSelected) {
+                toUnselect.push(el);
+            } else if (targetKeys.has(key) && !isSelected) {
+                toSelect.push(el);
             }
         });
+
+        // 1. Desmarca primeiro as cartas indesejadas
+        toUnselect.forEach(el => el.click());
+
+        // 2. Marca as novas cartas sem estourar o limite de 5 da interface
+        toSelect.forEach(el => el.click());
     }
 
     function executeAttack() {
