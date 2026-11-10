@@ -17,6 +17,10 @@ Toolkit em JavaScript (Client-side / Userscript / Quickbar) para o jogo Tribal W
 
 ### Fusão de Relíquias Inteligente (Relic Fusion Optimizer):
 ```javascript
+javascript:(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/gh/Azuelos/tw-toolkit@main/RelicFusionPTBR.js?_='+Date.now();document.head.appendChild(s);})();void(0);
+```
+*Ou formato alternativo via jQuery:*
+```javascript
 javascript:$.getScript("https://cdn.jsdelivr.net/gh/Azuelos/tw-toolkit@main/RelicFusionPTBR.js");void(0);
 ```
 
