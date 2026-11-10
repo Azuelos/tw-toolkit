@@ -1,7 +1,7 @@
 // ===========================================================================
 // 🏰 Póquer de Cerco AI — Assistente Tático & Otimizador de Mãos e Descarte
 // Evento "Póquer de Cerco" (Siege Poker) — Tribal Wars BR143
-// Versão: 1.1.0 (Edição Oficial TW Toolkit)
+// Versão: 1.2.0 (Piloto Automático Mãos Livres) (Edição Oficial TW Toolkit)
 // Desenvolvido por: Azuelos (@jhonatanazuelosoficial)
 //
 // Uso na Barra de Acesso Rápido do Tribal Wars:
@@ -21,7 +21,7 @@
     }
 
     const SCRIPT_NAME = 'Póquer de Cerco AI';
-    const SCRIPT_VERSION = 'v1.1.0';
+    const SCRIPT_VERSION = 'v1.2.0';
     const STORAGE_KEY = 'ond_tw_siege_poker_prefs';
 
     // Definição e Constantes Oficiais do Jogo
@@ -70,7 +70,7 @@
     // Preferências Locais
     let prefs = {
         minimized: false,
-        autoPlay: false,
+        autoPlay: true, // Piloto Automático Mãos Livres ATIVO por padrão
         safeOnlyFreeDiscards: true,
         fullFiveCardAttack: true // preenche até 5 cartas para reciclar lixo de graça
     };
@@ -78,6 +78,7 @@
     try {
         const saved = localStorage.getItem(STORAGE_KEY);
         if (saved) prefs = Object.assign(prefs, JSON.parse(saved));
+        prefs.autoPlay = true; // Sempre inicia jogando automaticamente a pedido do jogador
     } catch (e) {}
 
     function savePrefs() {
@@ -1020,6 +1021,22 @@
         });
 
         container.innerHTML = `
+            <!-- Banner Piloto Automático Mãos Livres -->
+            <div style="background: rgba(34, 197, 94, 0.15); border: 1px solid #22c55e; border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
+                <div>
+                    <div style="font-weight: 800; font-size: 12px; color: ${prefs.autoPlay ? '#4ade80' : '#f87171'}; display: flex; align-items: center; gap: 6px;">
+                        <span style="font-size: 14px;">${prefs.autoPlay ? '🟢' : '⏸️'}</span>
+                        <span>${prefs.autoPlay ? 'PILOTO AUTOMÁTICO (Mãos Livres)' : 'PILOTO AUTOMÁTICO PAUSADO'}</span>
+                    </div>
+                    <div id="twSpAutoPilotStatusText" style="font-size: 11px; color: #cbd5e1; margin-top: 2px;">
+                        ${autoPilotStatus}
+                    </div>
+                </div>
+                <button id="twSpBtnToggleAutopilot" class="tw-sp-btn" style="padding: 5px 12px; font-size: 11px; font-weight: 700; background: ${prefs.autoPlay ? '#ef4444' : '#22c55e'}; color: #fff; width: auto; margin: 0;">
+                    ${prefs.autoPlay ? '⏸️ Pausar' : '▶️ Retomar'}
+                </button>
+            </div>
+
             <!-- HUD Superior -->
             <div class="tw-sp-hud">
                 <div class="tw-sp-hud-item">
@@ -1150,6 +1167,18 @@
     }
 
     function bindEvents() {
+        document.getElementById('twSpBtnToggleAutopilot')?.addEventListener('click', () => {
+            prefs.autoPlay = !prefs.autoPlay;
+            savePrefs();
+            renderUI(true);
+            if (prefs.autoPlay) {
+                if (window.UI) window.UI.SuccessMessage('🟢 Piloto Automático ativado! Jogando por você...', 2000);
+                runAutoPlayCycle();
+            } else {
+                if (window.UI) window.UI.InfoMessage('⏸️ Piloto Automático pausado. Modo manual ativo.', 1500);
+            }
+        });
+
         document.getElementById('twSpBtnSelectBest')?.addEventListener('click', () => {
             if (cachedHandAnalysis && cachedHandAnalysis.best) {
                 const targetCards = prefs.fullFiveCardAttack ? cachedHandAnalysis.best.fullFiveCards : cachedHandAnalysis.best.contributing;
@@ -1215,19 +1244,61 @@
     }
 
     // =========================================================================
-    // 🤖 CICLO DE AUTO-JOGAR INTELIGENTE (SMART AUTO-PLAY)
+    // 🤖 CICLO DE AUTO-JOGAR INTELIGENTE (SMART AUTO-PLAY / MÃOS LIVRES)
     // =========================================================================
 
     let isAutoPlaying = false;
+    let autoPilotStatus = '🟢 Analisando rodada...';
+
+    function setAutoPilotStatus(msg) {
+        autoPilotStatus = msg;
+        const el = document.getElementById('twSpAutoPilotStatusText');
+        if (el) el.textContent = msg;
+    }
 
     async function runAutoPlayCycle() {
         if (!prefs.autoPlay || isAutoPlaying) return;
-        const state = getGameState();
-        if (state.handCards.length === 0 || state.actionsDisabled) return;
         isAutoPlaying = true;
 
         try {
+            // Fase A: Fechar modais de vitória / recompensa / diálogo do jogo
+            const rewardCloser = document.querySelector('#match_reward .popup_closer, #match_reward .btn-confirm-yes, .popup_box.match_reward .popup_closer, .siege-poker-modal .popup_closer, .popup_box .popup_closer');
+            if (rewardCloser && rewardCloser.offsetParent !== null) {
+                setAutoPilotStatus('🎁 Coletando recompensa do castelo...');
+                await delay(700);
+                rewardCloser.click();
+                await delay(900);
+                return;
+            }
+
+            // Fase B: Loja de Bandeiras (entre castelos) -> Avançar automaticamente para o próximo castelo
+            const startBattleBtn = document.getElementById('btn_start_battle');
+            if (isFlagShopActive() || (startBattleBtn && startBattleBtn.offsetParent !== null)) {
+                setAutoPilotStatus('⚔️ Iniciando próximo castelo em 1s...');
+                await delay(1000);
+                if (startBattleBtn) startBattleBtn.click();
+                return;
+            }
+
+            // Fase C: Batalha em Andamento
+            const state = getGameState();
             const handCards = state.handCards;
+
+            if (handCards.length === 0) {
+                setAutoPilotStatus('⏳ Aguardando distribuição de cartas...');
+                return;
+            }
+
+            if (state.actionsDisabled) {
+                setAutoPilotStatus('⏳ Aguardando animação do jogo finalizar...');
+                return;
+            }
+
+            if (state.availableAttacks <= 0) {
+                setAutoPilotStatus('⏸️ Sem ataques disponíveis nesta rodada.');
+                return;
+            }
+
             const castle = state.castle;
             const freeDiscards = state.freeDiscards;
             const handAnalysis = analyzeAllHands(handCards);
@@ -1238,36 +1309,41 @@
 
             // Decisão 1: Dano Letal (Derruba o castelo imediatamente)
             if (best.info.pts >= castle.defense_power) {
+                setAutoPilotStatus(`👑 Dano letal (${best.info.pts} pts)! Atacando com ${best.info.name}...`);
                 selectCardsOnBoard(prefs.fullFiveCardAttack ? best.fullFiveCards : best.contributing);
-                await delay(400);
+                await delay(450);
                 executeAttack();
                 return;
             }
 
-            // Decisão 2: Mão forte (>= 100 pts) -> Ataca!
+            // Decisão 2: Mão Forte (Trinca, Straight, Flush, Full House, Quadra, etc. >= 100 pts) -> Ataca!
             if (best.info.pts >= 100) {
+                setAutoPilotStatus(`⚔️ Mão forte! Atacando com ${best.info.name} (+${best.info.pts} pts)...`);
                 selectCardsOnBoard(prefs.fullFiveCardAttack ? best.fullFiveCards : best.contributing);
-                await delay(400);
+                await delay(450);
                 executeAttack();
                 return;
             }
 
-            // Decisão 3: Mão fraca (< 100 pts) e TEM descartes grátis -> Descarta!
+            // Decisão 3: Mão Fraca (< 100 pts) e TEM descartes grátis -> Descarta pelo maior EV!
             if (freeDiscards > 0 && discardAnalysis && discardAnalysis.discard.length > 0) {
+                setAutoPilotStatus(`🎲 ${discardAnalysis.title} (${discardAnalysis.prob}). Descartando ${discardAnalysis.discard.length} cartas...`);
                 selectCardsOnBoard(discardAnalysis.discard);
-                await delay(400);
+                await delay(450);
                 const ok = executeDiscard();
                 if (!ok) {
+                    setAutoPilotStatus(`⚔️ Atacando com ${best.info.name} (+${best.info.pts} pts)...`);
                     selectCardsOnBoard(prefs.fullFiveCardAttack ? best.fullFiveCards : best.contributing);
-                    await delay(350);
+                    await delay(400);
                     executeAttack();
                 }
                 return;
             }
 
-            // Decisão 4: Sem descartes grátis -> Ataca com o que tiver
+            // Decisão 4: Sem descartes grátis -> Ataca com a melhor mão disponível
+            setAutoPilotStatus(`⚔️ Sem descartes. Atacando com ${best.info.name} (+${best.info.pts} pts)...`);
             selectCardsOnBoard(prefs.fullFiveCardAttack ? best.fullFiveCards : best.contributing);
-            await delay(400);
+            await delay(450);
             executeAttack();
 
         } catch (err) {
@@ -1298,13 +1374,13 @@
 
         observer.observe(targetNode, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'data-cost', 'style'] });
 
-        // Polling ativo a cada 1.2 segundos para garantir sincronismo total
+        // Polling ativo a cada 900ms para execução imediata e ágil
         pollInterval = setInterval(() => {
             renderUI();
             if (prefs.autoPlay && !isAutoPlaying) {
                 runAutoPlayCycle();
             }
-        }, 1200);
+        }, 900);
     }
 
     // =========================================================================
@@ -1315,8 +1391,12 @@
     renderUI(true);
     setupObserverAndPolling();
 
+    if (prefs.autoPlay) {
+        setTimeout(runAutoPlayCycle, 400);
+    }
+
     if (window.UI && typeof window.UI.SuccessMessage === 'function') {
-        window.UI.SuccessMessage('🏰 Assistente do Póquer de Cerco carregado!', 2500);
+        window.UI.SuccessMessage('🏰 Piloto Automático Ativado! Jogando por você...', 2500);
     }
 
 })();
