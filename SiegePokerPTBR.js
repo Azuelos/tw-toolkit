@@ -1,7 +1,7 @@
 // ===========================================================================
 // 🏰 Póquer de Cerco AI — Assistente Tático & Otimizador de Mãos e Descarte
 // Evento "Póquer de Cerco" (Siege Poker) — Tribal Wars BR143
-// Versão: 1.2.3 (Filtro Anti-Debuff & Piloto Automático) (Edição Oficial TW Toolkit)
+// Versão: 1.2.4 (Auto-Coleta de Poderes / Bandeiras) (Edição Oficial TW Toolkit)
 // Desenvolvido por: Azuelos (@jhonatanazuelosoficial)
 //
 // Uso na Barra de Acesso Rápido do Tribal Wars:
@@ -21,7 +21,7 @@
     }
 
     const SCRIPT_NAME = 'Póquer de Cerco AI';
-    const SCRIPT_VERSION = 'v1.2.3';
+    const SCRIPT_VERSION = 'v1.2.4';
     const STORAGE_KEY = 'ond_tw_siege_poker_prefs';
 
     // Definição e Constantes Oficiais do Jogo
@@ -1360,11 +1360,47 @@
                 return;
             }
 
-            // Fase B: Loja de Bandeiras (entre castelos) -> Avançar automaticamente para o próximo castelo
+            // Fase B: Loja de Bandeiras (entre castelos) -> Coletar poderes / bandeiras e iniciar batalha
             if (isFlagShopActive()) {
+                // B.1: Se a caixa de confirmação de iniciar sem bandeiras estiver aberta, cancela para podermos tomar a bandeira!
+                const startBattleConfirmBox = document.getElementById('start-battle-confirmation-box');
+                if (startBattleConfirmBox && startBattleConfirmBox.offsetParent !== null) {
+                    const cancelBtn = startBattleConfirmBox.querySelector('.btn-confirm-no');
+                    if (cancelBtn) {
+                        cancelBtn.click();
+                        await delay(500);
+                    }
+                }
+
+                // B.2: Verificar se há pontos de captura e botões 'Tomar' ativos
+                const fs = getSiegePokerFlagShop();
+                const canTake = (fs && typeof fs.canTakeFlag === 'function') ? fs.canTakeFlag() : true;
+
+                const takeButtons = Array.from(document.querySelectorAll('.select-flag')).filter(btn => {
+                    return !btn.hasAttribute('disabled') && !btn.classList.contains('disabled');
+                });
+
+                if (canTake && takeButtons.length > 0) {
+                    // Prioridade 1: Bandeira que sobe de nível (level_up)
+                    let targetBtn = takeButtons.find(btn => btn.closest('.flag-data')?.querySelector('.flag-border.level_up'));
+                    if (!targetBtn) {
+                        // Prioridade 2: Primeira bandeira ativa disponível
+                        targetBtn = takeButtons[0];
+                    }
+
+                    if (targetBtn) {
+                        setAutoPilotStatus('🚩 Coletando poder / bandeira para fortalecer seu baralho...');
+                        await delay(600);
+                        targetBtn.click();
+                        await delay(1200); // Aguarda o AJAX da InnoGames processar a bandeira
+                        return;
+                    }
+                }
+
+                // B.3: Todas as bandeiras coletadas -> Iniciar Próxima Batalha!
                 const startBattleBtn = document.getElementById('btn_start_battle');
                 if (startBattleBtn && startBattleBtn.offsetParent !== null) {
-                    setAutoPilotStatus('⚔️ Loja concluída. Iniciando próximo castelo...');
+                    setAutoPilotStatus('⚔️ Poderes coletados! Iniciando próximo castelo...');
                     await delay(1000);
                     startBattleBtn.click();
                     return;
