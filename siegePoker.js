@@ -1,7 +1,7 @@
 // ===========================================================================
 // 🏰 Póquer de Cerco AI — Assistente Tático & Otimizador de Mãos e Descarte
 // Evento "Póquer de Cerco" (Siege Poker) — Tribal Wars BR143
-// Versão: 1.2.2 (Piloto Automático Mãos Livres) (Edição Oficial TW Toolkit)
+// Versão: 1.2.3 (Filtro Anti-Debuff & Piloto Automático) (Edição Oficial TW Toolkit)
 // Desenvolvido por: Azuelos (@jhonatanazuelosoficial)
 //
 // Uso na Barra de Acesso Rápido do Tribal Wars:
@@ -21,7 +21,7 @@
     }
 
     const SCRIPT_NAME = 'Póquer de Cerco AI';
-    const SCRIPT_VERSION = 'v1.2.2';
+    const SCRIPT_VERSION = 'v1.2.3';
     const STORAGE_KEY = 'ond_tw_siege_poker_prefs';
 
     // Definição e Constantes Oficiais do Jogo
@@ -165,10 +165,33 @@
             }
 
             if (suit && rank) {
+                suit = suit.toLowerCase();
+                rank = rank.toLowerCase();
+
+                // Identifica se a carta está debuffada (com o X vermelho da InnoGames)
+                let isDebuffed = (el.dataset?.modifier_debuffed === '1' || el.getAttribute('data-modifier_debuffed') === '1');
+                if (!isDebuffed && (el.classList.contains('counter-attack-target') || (el.style && el.style.backgroundImage && el.style.backgroundImage.includes('overlay_debuff')))) {
+                    isDebuffed = true;
+                }
+
+                // Identifica se a carta está oculta (face down)
+                const isFaceDown = (el.dataset?.modifier_face_down === '1' || el.getAttribute('data-modifier_face_down') === '1');
+
+                // Identifica se a carta é veterana
+                const isVeteran = (el.dataset?.modifier_veteran === '1' || el.getAttribute('data-modifier_veteran') === '1');
+
+                const mods = [];
+                if (isDebuffed) mods.push('debuffed');
+                if (isFaceDown) mods.push('face_down');
+                if (isVeteran) mods.push('veteran');
+
                 domHand.push({
-                    suit: suit.toLowerCase(),
-                    rank: rank.toLowerCase(),
-                    modifiers: (el.dataset?.modifier_veteran || el.getAttribute('data-modifier_veteran')) ? ['veteran'] : [],
+                    suit: suit,
+                    rank: rank,
+                    modifiers: mods,
+                    isDebuffed: isDebuffed,
+                    isFaceDown: isFaceDown,
+                    isVeteran: isVeteran,
                     element: el
                 });
             }
@@ -177,7 +200,19 @@
         // Se DOM ainda não populou mas o objeto sp tem cards_hand
         let finalHand = domHand;
         if (finalHand.length === 0 && sp && sp.hand_cards && sp.hand_cards.length > 0) {
-            finalHand = sp.hand_cards;
+            finalHand = sp.hand_cards.map(c => {
+                const isDebuffed = Boolean(c.modifiers && c.modifiers.includes('debuffed'));
+                const isFaceDown = Boolean(c.modifiers && c.modifiers.includes('face_down'));
+                const isVeteran = Boolean(c.modifiers && c.modifiers.includes('veteran'));
+                return {
+                    suit: (c.suit || '').toLowerCase(),
+                    rank: (c.rank || '').toLowerCase(),
+                    modifiers: c.modifiers || [],
+                    isDebuffed: isDebuffed,
+                    isFaceDown: isFaceDown,
+                    isVeteran: isVeteran
+                };
+            });
         }
 
         // 2. Pontos de Defesa do Castelo e Número
@@ -355,10 +390,15 @@
     function analyzeAllHands(handCards) {
         if (!handCards || handCards.length === 0) return { best: null, allHands: [] };
 
+        // 🛡️ FILTRO MANDATÓRIO: Cartas debuffadas (com o X vermelho) e cartas face-down
+        // NÃO PODEM ser usadas para pontuar ou atacar!
+        const playableCards = handCards.filter(c => !c.isDebuffed && !c.isFaceDown);
+        if (playableCards.length === 0) return { best: null, allHands: [] };
+
         const evaluatedList = [];
         const seenHandSignatures = new Set();
 
-        const combos5 = combinations(handCards, Math.min(5, handCards.length));
+        const combos5 = combinations(playableCards, Math.min(5, playableCards.length));
         combos5.forEach(combo => {
             const res = evaluateCombination(combo);
             if (res) {
@@ -374,14 +414,14 @@
         });
 
         [4, 3, 2, 1].forEach(size => {
-            if (handCards.length >= size) {
-                combinations(handCards, size).forEach(combo => {
+            if (playableCards.length >= size) {
+                combinations(playableCards, size).forEach(combo => {
                     const res = evaluateCombination(combo);
                     if (res && res.contributing.length === combo.length) {
                         const sig = res.type + ':' + res.contributing.map(c => c.suit + '_' + c.rank).sort().join('|');
                         if (!seenHandSignatures.has(sig)) {
                             seenHandSignatures.add(sig);
-                            const remaining = handCards.filter(c => !combo.includes(c))
+                            const remaining = playableCards.filter(c => !combo.includes(c))
                                 .sort((a, b) => RANK_VALUES[a.rank] - RANK_VALUES[b.rank]);
                             const fullFive = [...combo, ...remaining.slice(0, 5 - combo.length)];
                             evaluatedList.push({
@@ -410,6 +450,23 @@
     function analyzeDiscardStrategy(handCards, deckCards) {
         if (!handCards || handCards.length === 0) return null;
         deckCards = deckCards || [];
+
+        // 0. Prioridade Absoluta: Cartas Bloqueadas (Debuffed com X vermelho)
+        const debuffedCards = handCards.filter(c => c.isDebuffed);
+        if (debuffedCards.length > 0) {
+            const playableHands = analyzeAllHands(handCards);
+            const keep = playableHands.best ? playableHands.best.contributing : handCards.filter(c => !c.isDebuffed && RANK_VALUES[c.rank] >= 8);
+            const discard = handCards.filter(c => c.isDebuffed || !keep.includes(c)).slice(0, 5);
+
+            return {
+                strategy: 'PURGE_DEBUFF',
+                title: `🚫 Purgar Carta Bloqueada (${debuffedCards.length} carta com X)`,
+                description: `Descartando a carta enfraquecida (${debuffedCards.map(c => SUIT_ICONS[c.suit] + ' ' + c.rank.toUpperCase()).join(', ')}) para renovar sua mão com cartas limpas.`,
+                prob: `Limpeza`,
+                keep: handCards.filter(c => !discard.includes(c)),
+                discard: discard
+            };
+        }
 
         // 1. Flush Draw: 4 cartas do mesmo naipe
         const bySuit = {};
@@ -1076,6 +1133,14 @@
                     <span class="tw-sp-hud-val ${freeDiscards > 0 ? 'green' : 'red'}">${freeDiscards}</span>
                 </div>
             </div>
+
+            <!-- Alerta de Carta Bloqueada -->
+            ${handCards.some(c => c.isDebuffed) ? `
+                <div style="background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; border-radius: 6px; padding: 6px 10px; margin-bottom: 8px; font-size: 11px; color: #fca5a5; display: flex; align-items: center; gap: 6px;">
+                    <span style="font-size: 14px;">🚫</span>
+                    <span><b>Carta Bloqueada Detectada (X vermelho):</b> Excluída dos ataques. O bot irá descartá-la para comprar carta limpa.</span>
+                </div>
+            ` : ''}
 
             <!-- Card da Melhor Mão -->
             <div class="tw-sp-card-box">
