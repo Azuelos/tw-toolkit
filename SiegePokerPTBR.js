@@ -1,7 +1,7 @@
 // ===========================================================================
 // 🏰 Póquer de Cerco AI — Assistente Tático & Otimizador de Mãos e Descarte
 // Evento "Póquer de Cerco" (Siege Poker) — Tribal Wars BR143
-// Versão: 1.0.0 (Edição Oficial TW Toolkit)
+// Versão: 1.1.0 (Edição Oficial TW Toolkit)
 // Desenvolvido por: Azuelos (@jhonatanazuelosoficial)
 //
 // Uso na Barra de Acesso Rápido do Tribal Wars:
@@ -11,22 +11,17 @@
 (function () {
     'use strict';
 
-    // Evita duplicar instância se já estiver aberta
+    // Se já houver instância aberta, remove para injetar e atualizar para a v1.1.0 sem precisar recarregar página
     const CONTAINER_ID = 'twSiegePokerAIContainer';
     if (document.getElementById(CONTAINER_ID)) {
-        const existing = document.getElementById(CONTAINER_ID);
-        if (existing.style.display === 'none') {
-            existing.style.display = 'flex';
-        }
-        existing.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        if (window.UI && typeof window.UI.InfoMessage === 'function') {
-            window.UI.InfoMessage('🏰 Assistente do Póquer de Cerco já está ativo na tela!', 2500);
-        }
-        return;
+        try {
+            document.getElementById(CONTAINER_ID).remove();
+            if (window.twSpPollInterval) clearInterval(window.twSpPollInterval);
+        } catch (e) {}
     }
 
     const SCRIPT_NAME = 'Póquer de Cerco AI';
-    const SCRIPT_VERSION = 'v1.0.0';
+    const SCRIPT_VERSION = 'v1.1.0';
     const STORAGE_KEY = 'ond_tw_siege_poker_prefs';
 
     // Definição e Constantes Oficiais do Jogo
@@ -36,12 +31,6 @@
         archer: '🏹 Arqueiro',
         cavalry: '🐎 Cavalaria',
         siege: '🎯 Cerco'
-    };
-    const SUIT_SHORT = {
-        infantry: 'Inf',
-        archer: 'Arq',
-        cavalry: 'Cav',
-        siege: 'Cer'
     };
     const SUIT_ICONS = {
         infantry: '🛡️',
@@ -57,10 +46,6 @@
     };
 
     const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'j', 'q', 'k', 'a'];
-    const RANK_LABELS = {
-        '2': '2', '3': '3', '4': '4', '5': '5', '6': '6', '7': '7', '8': '8', '9': '9', '10': '10',
-        'j': 'Valete (J)', 'q': 'Dama (Q)', 'k': 'Rei (K)', 'a': 'Ás (A)'
-    };
     const RANK_SHORT = {
         '2': '2', '3': '3', '4': '4', '5': '5', '6': '6', '7': '7', '8': '8', '9': '9', '10': '10',
         'j': 'J', 'q': 'Q', 'k': 'K', 'a': 'A'
@@ -87,7 +72,7 @@
         minimized: false,
         autoPlay: false,
         safeOnlyFreeDiscards: true,
-        fullFiveCardAttack: true // se true, preenche até 5 cartas para reciclar lixo do baralho de graça
+        fullFiveCardAttack: true // preenche até 5 cartas para reciclar lixo de graça
     };
 
     try {
@@ -100,23 +85,195 @@
     }
 
     // =========================================================================
-    // 🧠 MOTOR MATEMÁTICO DE AVALIAÇÃO DE MÃOS (POKER ENGINE)
+    // 🔍 IDENTIFICAÇÃO RESILIENTE DO JOGO (DUAL DOM + SCOPE DETECTION)
     // =========================================================================
 
+    function getSiegePoker() {
+        try {
+            if (typeof SiegePoker !== 'undefined' && SiegePoker) {
+                if (typeof window !== 'undefined' && !window.SiegePoker) window.SiegePoker = SiegePoker;
+                return SiegePoker;
+            }
+        } catch (e) {}
+        try {
+            if (typeof window !== 'undefined' && window.SiegePoker) return window.SiegePoker;
+        } catch (e) {}
+        return null;
+    }
+
+    function getSiegePokerFlagShop() {
+        try {
+            if (typeof SiegePokerFlagShop !== 'undefined' && SiegePokerFlagShop) {
+                if (typeof window !== 'undefined' && !window.SiegePokerFlagShop) window.SiegePokerFlagShop = SiegePokerFlagShop;
+                return SiegePokerFlagShop;
+            }
+        } catch (e) {}
+        try {
+            if (typeof window !== 'undefined' && window.SiegePokerFlagShop) return window.SiegePokerFlagShop;
+        } catch (e) {}
+        return null;
+    }
+
+    function isEventScreen() {
+        return Boolean(
+            document.getElementById('hand_cards') ||
+            document.getElementById('btn_attack') ||
+            document.getElementById('btn_start_battle') ||
+            window.location.href.includes('screen=event_siege_poker') ||
+            getSiegePoker() ||
+            getSiegePokerFlagShop()
+        );
+    }
+
+    function isFlagShopActive() {
+        if (document.getElementById('btn_start_battle') && document.getElementById('flags_counter')) return true;
+        const fs = getSiegePokerFlagShop();
+        return Boolean(fs && fs.flag_shop);
+    }
+
     /**
-     * Avalia uma combinação específica de até 5 cartas e retorna [tipo, pontos, cartasContribuintes]
+     * Extrai o estado completo da batalha atual com leitura direta no DOM
      */
+    function getGameState() {
+        const sp = getSiegePoker();
+        const fs = getSiegePokerFlagShop();
+
+        // 1. Extração de Cartas da Mão (Prioridade DOM com Fallback via background-image)
+        const cardElements = document.querySelectorAll('#hand_cards .card');
+        const domHand = [];
+
+        cardElements.forEach(el => {
+            let suit = el.dataset ? el.dataset.suit : null;
+            let rank = el.dataset ? el.dataset.rank : null;
+
+            // Fallback via estilo se dataset ainda não tiver sido sincronizado
+            if ((!suit || !rank) && el.style && el.style.backgroundImage) {
+                const m = el.style.backgroundImage.match(/cards\/([^_]+)_([^.]+)\.png/);
+                if (m) {
+                    rank = m[1].toLowerCase();
+                    suit = m[2].toLowerCase();
+                }
+            }
+
+            if (suit && rank) {
+                domHand.push({
+                    suit: suit,
+                    rank: rank,
+                    modifiers: (el.dataset && el.dataset.modifier_veteran) ? ['veteran'] : [],
+                    element: el
+                });
+            }
+        });
+
+        // Se DOM ainda não populou mas o objeto sp tem cards_hand
+        let finalHand = domHand;
+        if (finalHand.length === 0 && sp && sp.hand_cards && sp.hand_cards.length > 0) {
+            finalHand = sp.hand_cards;
+        }
+
+        // 2. Pontos de Defesa do Castelo e Número
+        let castleDef = 0;
+        const defEl = document.getElementById('castle_defense_power_value');
+        if (defEl && defEl.textContent.trim()) {
+            castleDef = parseInt(defEl.textContent.replace(/[^0-9]/g, ''), 10) || 0;
+        } else if (sp && sp.castle && sp.castle.defense_power !== undefined) {
+            castleDef = sp.castle.defense_power;
+        }
+
+        let castleNum = 1;
+        const numEl = document.getElementById('castle_number_value');
+        if (numEl && numEl.textContent.trim()) {
+            castleNum = parseInt(numEl.textContent.replace(/[^0-9]/g, ''), 10) || 1;
+        } else if (sp && sp.castle && sp.castle.number !== undefined) {
+            castleNum = sp.castle.number;
+        }
+
+        // 3. Ataques Restantes
+        let availableAttacks = 3;
+        const attEl = document.getElementById('btn_attack_stats');
+        if (attEl && attEl.textContent.trim()) {
+            const m = attEl.textContent.match(/(\d+)/);
+            if (m) availableAttacks = parseInt(m[1], 10);
+        } else if (sp && sp.available_attacks !== undefined) {
+            availableAttacks = sp.available_attacks;
+        }
+
+        // 4. Descartes Gratuitos Restantes e Custo
+        let freeDiscards = 0;
+        const discardBtn = document.getElementById('btn_discard');
+        const cost = discardBtn ? parseInt(discardBtn.getAttribute('data-cost') || '0', 10) : 0;
+        const discStats = document.getElementById('btn_discard_stats');
+        if (discStats && discStats.textContent.trim()) {
+            const m = discStats.textContent.match(/(\d+)/);
+            if (m) {
+                freeDiscards = (cost === 0) ? parseInt(m[1], 10) : 0;
+            }
+        } else if (sp && sp.available_free_discards !== undefined) {
+            freeDiscards = (cost === 0) ? sp.available_free_discards : 0;
+        }
+
+        // 5. Cartas Restantes no Baralho
+        let deckCount = 44;
+        const deckStats = document.getElementById('card_deck_stats');
+        if (deckStats && deckStats.textContent.trim()) {
+            const m = deckStats.textContent.match(/(\d+)/);
+            if (m) deckCount = parseInt(m[1], 10);
+        } else if (sp && sp.remaining_cards_in_deck !== undefined) {
+            deckCount = sp.remaining_cards_in_deck;
+        }
+
+        // Lista de Cartas no Baralho
+        let deckCards = (sp && sp.cards_in_deck) ? sp.cards_in_deck : [];
+        if (deckCards.length === 0 && finalHand.length > 0) {
+            const handKeys = new Set(finalHand.map(c => `${c.suit}_${c.rank}`));
+            const fullDeck = [];
+            SUITS.forEach(s => {
+                RANKS.forEach(r => {
+                    if (!handKeys.has(`${s}_${r}`)) fullDeck.push({ suit: s, rank: r });
+                });
+            });
+            deckCards = fullDeck;
+        }
+
+        // Status de botões desabilitados
+        let actionsDisabled = false;
+        const attackBtn = document.getElementById('btn_attack');
+        if (attackBtn && attackBtn.hasAttribute('disabled')) {
+            actionsDisabled = true;
+        } else if (sp && sp.actions_disabled !== undefined) {
+            actionsDisabled = sp.actions_disabled;
+        }
+
+        return {
+            sp: sp,
+            fs: fs,
+            handCards: finalHand,
+            castle: {
+                number: castleNum,
+                defense_power: castleDef
+            },
+            availableAttacks: availableAttacks,
+            freeDiscards: freeDiscards,
+            discardCost: cost,
+            remainingDeck: deckCount,
+            deckCards: deckCards,
+            actionsDisabled: actionsDisabled
+        };
+    }
+
+    // =========================================================================
+    // 🧠 MOTOR DE AVALIAÇÃO DE MÃOS (POKER ENGINE)
+    // =========================================================================
+
     function evaluateCombination(cards) {
         if (!cards || cards.length === 0) return null;
 
-        // Agrupamento por Rank
         const byRank = {};
         cards.forEach(c => {
             byRank[c.rank] = byRank[c.rank] || [];
             byRank[c.rank].push(c);
         });
 
-        // Agrupamento por Naipe
         const bySuit = {};
         cards.forEach(c => {
             bySuit[c.suit] = bySuit[c.suit] || [];
@@ -125,21 +282,17 @@
 
         const isFlush = cards.length === 5 && Object.keys(bySuit).length === 1;
 
-        // Verificação de Sequência (Straight)
         let isStraight = false;
         let isRoyal = false;
         let straightCards = [];
 
         if (cards.length === 5) {
             const sortedRanks = cards.map(c => RANK_VALUES[c.rank]).sort((a, b) => a - b);
-            // Sequência normal
             if (new Set(sortedRanks).size === 5 && sortedRanks[4] - sortedRanks[0] === 4) {
                 isStraight = true;
                 straightCards = cards;
-                if (sortedRanks[4] === 12) isRoyal = true; // Termina em Ás
-            }
-            // Sequência com Ás baixo (A, 2, 3, 4, 5) -> índices: [0, 1, 2, 3, 12]
-            else if (sortedRanks.join(',') === '0,1,2,3,12') {
+                if (sortedRanks[4] === 12) isRoyal = true;
+            } else if (sortedRanks.join(',') === '0,1,2,3,12') {
                 isStraight = true;
                 straightCards = cards;
             }
@@ -176,14 +329,10 @@
             return { type: 'ONE_PAIR', info: HAND_TYPES.ONE_PAIR, contributing: rankGroups[0] };
         }
 
-        // Carta mais alta
         const highestCard = [...cards].sort((a, b) => RANK_VALUES[b.rank] - RANK_VALUES[a.rank])[0];
         return { type: 'HIGH_CARD', info: HAND_TYPES.HIGH_CARD, contributing: [highestCard] };
     }
 
-    /**
-     * Gera todas as combinações de tamanho k de um array
-     */
     function combinations(arr, k) {
         if (k === 0) return [[]];
         if (arr.length === 0 || k > arr.length) return [];
@@ -194,21 +343,16 @@
         return [...withHead, ...withoutHead];
     }
 
-    /**
-     * Analisa as 8 cartas na mão do jogador e gera todas as mãos possíveis ordenadas
-     */
     function analyzeAllHands(handCards) {
         if (!handCards || handCards.length === 0) return { best: null, allHands: [] };
 
         const evaluatedList = [];
         const seenHandSignatures = new Set();
 
-        // Avalia todas as combinações de tamanho 5 (56 combinações possíveis)
         const combos5 = combinations(handCards, Math.min(5, handCards.length));
         combos5.forEach(combo => {
             const res = evaluateCombination(combo);
             if (res) {
-                // Identificador único para a mão por cartas contribuintes
                 const sig = res.type + ':' + res.contributing.map(c => c.suit + '_' + c.rank).sort().join('|');
                 if (!seenHandSignatures.has(sig)) {
                     seenHandSignatures.add(sig);
@@ -220,7 +364,6 @@
             }
         });
 
-        // Avalia também combinações puras menores (ex: 4 cartas para Quadra, 3 para Trinca, 2 para Par)
         [4, 3, 2, 1].forEach(size => {
             if (handCards.length >= size) {
                 combinations(handCards, size).forEach(combo => {
@@ -229,9 +372,8 @@
                         const sig = res.type + ':' + res.contributing.map(c => c.suit + '_' + c.rank).sort().join('|');
                         if (!seenHandSignatures.has(sig)) {
                             seenHandSignatures.add(sig);
-                            // Cria um combo de 5 completando com cartas de menor valor se disponível
                             const remaining = handCards.filter(c => !combo.includes(c))
-                                .sort((a, b) => RANK_VALUES[a.rank] - RANK_VALUES[b.rank]); // cartas mais baixas
+                                .sort((a, b) => RANK_VALUES[a.rank] - RANK_VALUES[b.rank]);
                             const fullFive = [...combo, ...remaining.slice(0, 5 - combo.length)];
                             evaluatedList.push({
                                 ...res,
@@ -243,10 +385,8 @@
             }
         });
 
-        // Ordena por pontuação decrescente
         evaluatedList.sort((a, b) => {
             if (b.info.pts !== a.info.pts) return b.info.pts - a.info.pts;
-            // Desempate por valor das cartas contribuintes
             const sumA = a.contributing.reduce((acc, c) => acc + RANK_VALUES[c.rank], 0);
             const sumB = b.contributing.reduce((acc, c) => acc + RANK_VALUES[c.rank], 0);
             return sumB - sumA;
@@ -258,9 +398,6 @@
         };
     }
 
-    /**
-     * Analisador de Potencial de Descarte (Draw Odds & Outs)
-     */
     function analyzeDiscardStrategy(handCards, deckCards) {
         if (!handCards || handCards.length === 0) return null;
         deckCards = deckCards || [];
@@ -276,7 +413,6 @@
                 const discard = handCards.filter(c => !cards.includes(c));
                 const outs = deckCards.filter(c => c.suit === s).length;
                 const totalDeck = deckCards.length || 44;
-                // Chance aproximada de acertar pelo menos 1 carta em 4 compras
                 const prob = totalDeck > 0 ? Math.min(99, Math.round((1 - Math.pow((totalDeck - outs) / totalDeck, discard.length)) * 100)) : 0;
                 return {
                     strategy: 'FLUSH_DRAW',
@@ -293,7 +429,7 @@
         const uniqueRankValues = Array.from(new Set(handCards.map(c => RANK_VALUES[c.rank]))).sort((a, b) => a - b);
         for (let i = 0; i <= uniqueRankValues.length - 4; i++) {
             const slice = uniqueRankValues.slice(i, i + 4);
-            if (slice[3] - slice[0] === 3) { // 4 em sequência
+            if (slice[3] - slice[0] === 3) {
                 const neededRanks = [];
                 if (slice[0] > 0) neededRanks.push(RANKS[slice[0] - 1]);
                 if (slice[3] < 12) neededRanks.push(RANKS[slice[3] + 1]);
@@ -321,7 +457,7 @@
             }
         }
 
-        // 3. Trinca: manter as 3 cartas e descartar 5 para buscar Quadra ou Full House
+        // 3. Trinca
         const byRank = {};
         handCards.forEach(c => {
             byRank[c.rank] = byRank[c.rank] || [];
@@ -340,7 +476,7 @@
             };
         }
 
-        // 4. Dois Pares: manter os 2 pares e descartar 4 para buscar Full House
+        // 4. Dois Pares
         const pairs = Object.values(byRank).filter(g => g.length === 2);
         if (pairs.length >= 2) {
             const keep = [...pairs[0], ...pairs[1]];
@@ -355,7 +491,7 @@
             };
         }
 
-        // 5. Um Par: manter o par e descartar as 6 cartas mais fracas
+        // 5. Um Par
         if (pairs.length === 1) {
             const keep = pairs[0];
             const discard = handCards.filter(c => !keep.includes(c));
@@ -369,7 +505,7 @@
             };
         }
 
-        // 6. Carta Alta: manter as 3 maiores cartas e descartar as 5 menores
+        // 6. Carta Alta
         const sortedDesc = [...handCards].sort((a, b) => RANK_VALUES[b.rank] - RANK_VALUES[a.rank]);
         const keepHigh = sortedDesc.slice(0, 3);
         const discardLow = sortedDesc.slice(3);
@@ -384,39 +520,22 @@
     }
 
     // =========================================================================
-    // 🎮 INTERAÇÃO COM O JOGO (DOM SELECTION & ACTIONS)
+    // 🎮 INTERAÇÃO COM O TABULEIRO (DOM ACTIONS)
     // =========================================================================
 
-    function isEventScreen() {
-        return window.location.href.includes('screen=event_siege_poker') || Boolean(window.SiegePoker || window.SiegePokerFlagShop);
-    }
-
-    function isBattleActive() {
-        return Boolean(window.SiegePoker && window.SiegePoker.hand_cards && window.SiegePoker.hand_cards.length > 0);
-    }
-
-    function isFlagShopActive() {
-        return Boolean(window.SiegePokerFlagShop && window.SiegePokerFlagShop.flag_shop);
-    }
-
-    /**
-     * Limpa a seleção de todas as cartas na tela
-     */
-    function clearBoardSelection() {
-        const selected = document.querySelectorAll('#hand_cards .card.card-selected');
-        selected.forEach(el => el.click());
-    }
-
-    /**
-     * Seleciona no tabuleiro as cartas fornecidas
-     */
     function selectCardsOnBoard(cardsToSelect) {
         if (!cardsToSelect || cardsToSelect.length === 0) return;
         const targetKeys = new Set(cardsToSelect.map(c => `${c.suit}_${c.rank}`));
         const cardElements = document.querySelectorAll('#hand_cards .card');
 
         cardElements.forEach(el => {
-            const key = `${el.dataset.suit}_${el.dataset.rank}`;
+            let suit = el.dataset.suit;
+            let rank = el.dataset.rank;
+            if (!suit || !rank) {
+                const m = el.style.backgroundImage ? el.style.backgroundImage.match(/cards\/([^_]+)_([^.]+)\.png/) : null;
+                if (m) { rank = m[1].toLowerCase(); suit = m[2].toLowerCase(); }
+            }
+            const key = `${suit}_${rank}`;
             const isSelected = el.classList.contains('card-selected');
             if (targetKeys.has(key) && !isSelected) {
                 el.click();
@@ -426,9 +545,6 @@
         });
     }
 
-    /**
-     * Executa o ataque com segurança
-     */
     function executeAttack() {
         const btn = document.getElementById('btn_attack');
         if (!btn || btn.hasAttribute('disabled')) {
@@ -439,9 +555,6 @@
         return true;
     }
 
-    /**
-     * Executa o descarte com proteção estrita contra gasto de Pontos Premium
-     */
     function executeDiscard() {
         const btn = document.getElementById('btn_discard');
         if (!btn || btn.hasAttribute('disabled')) {
@@ -479,11 +592,11 @@
                     right: 20px;
                     width: 390px;
                     max-height: 90vh;
-                    background: rgba(15, 23, 42, 0.94);
-                    backdrop-filter: blur(12px);
-                    -webkit-backdrop-filter: blur(12px);
-                    border: 1px solid rgba(240, 168, 96, 0.35);
-                    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.65), 0 0 15px rgba(240, 168, 96, 0.15);
+                    background: rgba(15, 23, 42, 0.95);
+                    backdrop-filter: blur(14px);
+                    -webkit-backdrop-filter: blur(14px);
+                    border: 1px solid rgba(240, 168, 96, 0.4);
+                    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7), 0 0 18px rgba(240, 168, 96, 0.18);
                     border-radius: 12px;
                     z-index: 15000;
                     color: #f8fafc;
@@ -492,16 +605,15 @@
                     flex-direction: column;
                     overflow: hidden;
                     box-sizing: border-box;
-                    transition: all 0.25s ease;
                 }
                 #${CONTAINER_ID} * { box-sizing: border-box; }
                 .tw-sp-header {
-                    background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.95));
+                    background: linear-gradient(135deg, rgba(30, 41, 59, 0.98), rgba(15, 23, 42, 0.98));
                     padding: 10px 14px;
                     display: flex;
                     align-items: center;
                     justify-content: space-between;
-                    border-bottom: 1px solid rgba(240, 168, 96, 0.25);
+                    border-bottom: 1px solid rgba(240, 168, 96, 0.3);
                     cursor: move;
                     user-select: none;
                 }
@@ -516,9 +628,9 @@
                 }
                 .tw-sp-badge {
                     font-size: 9px;
-                    background: rgba(240, 168, 96, 0.2);
+                    background: rgba(240, 168, 96, 0.25);
                     color: #fadc9b;
-                    border: 1px solid rgba(240, 168, 96, 0.4);
+                    border: 1px solid rgba(240, 168, 96, 0.45);
                     padding: 2px 6px;
                     border-radius: 4px;
                 }
@@ -531,12 +643,12 @@
                     border: none;
                     color: #94a3b8;
                     cursor: pointer;
-                    font-size: 14px;
+                    font-size: 13px;
                     padding: 2px 6px;
                     border-radius: 4px;
                     transition: 0.15s;
                 }
-                .tw-sp-btn-icon:hover { color: #f8fafc; background: rgba(255, 255, 255, 0.1); }
+                .tw-sp-btn-icon:hover { color: #f8fafc; background: rgba(255, 255, 255, 0.12); }
                 .tw-sp-body {
                     padding: 12px;
                     overflow-y: auto;
@@ -549,10 +661,10 @@
                     display: grid;
                     grid-template-columns: repeat(3, 1fr);
                     gap: 6px;
-                    background: rgba(30, 41, 59, 0.6);
+                    background: rgba(30, 41, 59, 0.65);
                     padding: 8px;
                     border-radius: 8px;
-                    border: 1px solid rgba(255, 255, 255, 0.05);
+                    border: 1px solid rgba(255, 255, 255, 0.06);
                     text-align: center;
                 }
                 .tw-sp-hud-item {
@@ -566,10 +678,9 @@
                 .tw-sp-hud-val.green { color: #4ade80; }
                 .tw-sp-hud-val.red { color: #f87171; }
 
-                /* Best Hand Card */
                 .tw-sp-card-box {
-                    background: linear-gradient(135deg, rgba(240, 168, 96, 0.12), rgba(15, 23, 42, 0.6));
-                    border: 1px solid rgba(240, 168, 96, 0.4);
+                    background: linear-gradient(135deg, rgba(240, 168, 96, 0.15), rgba(15, 23, 42, 0.7));
+                    border: 1px solid rgba(240, 168, 96, 0.45);
                     border-radius: 8px;
                     padding: 10px;
                     display: flex;
@@ -593,10 +704,10 @@
                     font-size: 14px;
                     font-weight: 800;
                     color: #4ade80;
-                    background: rgba(34, 197, 94, 0.15);
+                    background: rgba(34, 197, 94, 0.18);
                     padding: 2px 8px;
                     border-radius: 6px;
-                    border: 1px solid rgba(34, 197, 94, 0.3);
+                    border: 1px solid rgba(34, 197, 94, 0.35);
                 }
                 .tw-sp-cards-preview {
                     display: flex;
@@ -608,14 +719,13 @@
                     border-radius: 4px;
                     font-weight: 700;
                     font-size: 11px;
-                    background: rgba(30, 41, 59, 0.8);
-                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    background: rgba(30, 41, 59, 0.85);
+                    border: 1px solid rgba(255, 255, 255, 0.12);
                     display: flex;
                     align-items: center;
                     gap: 3px;
                 }
 
-                /* Buttons */
                 .tw-sp-btn {
                     background: linear-gradient(135deg, #f0a860, #d97706);
                     color: #0f172a;
@@ -632,28 +742,24 @@
                     font-size: 12px;
                     box-shadow: 0 2px 6px rgba(240, 168, 96, 0.3);
                 }
-                .tw-sp-btn:hover {
-                    filter: brightness(1.1);
-                    transform: translateY(-1px);
-                }
+                .tw-sp-btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
                 .tw-sp-btn:active { transform: translateY(0); }
                 .tw-sp-btn-secondary {
-                    background: rgba(51, 65, 85, 0.8);
+                    background: rgba(51, 65, 85, 0.85);
                     color: #f8fafc;
                     box-shadow: none;
-                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    border: 1px solid rgba(255, 255, 255, 0.12);
                 }
-                .tw-sp-btn-secondary:hover { background: rgba(71, 85, 105, 0.9); }
+                .tw-sp-btn-secondary:hover { background: rgba(71, 85, 105, 0.95); }
                 .tw-sp-btn-success {
                     background: linear-gradient(135deg, #22c55e, #15803d);
                     color: #ffffff;
                     box-shadow: 0 2px 6px rgba(34, 197, 94, 0.3);
                 }
 
-                /* Strategy Box */
                 .tw-sp-strategy-box {
-                    background: rgba(30, 41, 59, 0.5);
-                    border: 1px dashed rgba(240, 168, 96, 0.3);
+                    background: rgba(30, 41, 59, 0.55);
+                    border: 1px dashed rgba(240, 168, 96, 0.35);
                     border-radius: 8px;
                     padding: 9px;
                     font-size: 11px;
@@ -668,7 +774,6 @@
                     justify-content: space-between;
                 }
 
-                /* Deck Tracker */
                 .tw-sp-deck-grid {
                     display: grid;
                     grid-template-columns: repeat(4, 1fr);
@@ -676,14 +781,13 @@
                     font-size: 11px;
                 }
                 .tw-sp-deck-pill {
-                    background: rgba(15, 23, 42, 0.6);
+                    background: rgba(15, 23, 42, 0.65);
                     border: 1px solid rgba(255, 255, 255, 0.08);
                     padding: 4px;
                     border-radius: 4px;
                     text-align: center;
                 }
 
-                /* Hands List Accordion */
                 .tw-sp-hands-list {
                     display: flex;
                     flex-direction: column;
@@ -697,15 +801,15 @@
                     justify-content: space-between;
                     align-items: center;
                     padding: 5px 8px;
-                    background: rgba(30, 41, 59, 0.4);
-                    border: 1px solid rgba(255, 255, 255, 0.05);
+                    background: rgba(30, 41, 59, 0.45);
+                    border: 1px solid rgba(255, 255, 255, 0.06);
                     border-radius: 6px;
                     cursor: pointer;
                     transition: 0.15s;
                 }
                 .tw-sp-hand-row:hover {
-                    background: rgba(240, 168, 96, 0.15);
-                    border-color: rgba(240, 168, 96, 0.3);
+                    background: rgba(240, 168, 96, 0.18);
+                    border-color: rgba(240, 168, 96, 0.35);
                 }
 
                 .tw-sp-toggle-row {
@@ -724,6 +828,7 @@
                     <span class="tw-sp-badge">${SCRIPT_VERSION}</span>
                 </div>
                 <div class="tw-sp-actions-bar">
+                    <button class="tw-sp-btn-icon" id="twSpBtnRefresh" title="Atualizar / Forçar Leitura">🔄</button>
                     <button class="tw-sp-btn-icon" id="twSpBtnMin" title="Minimizar">_</button>
                     <button class="tw-sp-btn-icon" id="twSpBtnClose" title="Fechar">✕</button>
                 </div>
@@ -732,7 +837,7 @@
             <div class="tw-sp-body" id="twSpBody">
                 <div id="twSpContent">
                     <div style="text-align: center; padding: 20px; color: #94a3b8;">
-                        Carregando dados do Póquer de Cerco...
+                        Carregando cartas e analisando tabuleiro...
                     </div>
                 </div>
             </div>
@@ -740,17 +845,23 @@
 
         document.body.appendChild(box);
 
-        // Arrastar Janela
         makeDraggable(box, document.getElementById('twSpHeader'));
 
-        // Minimizar e Fechar
-        document.getElementById('twSpBtnClose').addEventListener('click', () => box.remove());
+        document.getElementById('twSpBtnClose').addEventListener('click', () => {
+            if (pollInterval) clearInterval(pollInterval);
+            box.remove();
+        });
+        document.getElementById('twSpBtnRefresh').addEventListener('click', () => {
+            renderUI(true);
+            if (window.UI) window.UI.InfoMessage('🔄 Tabuleiro atualizado!', 1200);
+        });
         document.getElementById('twSpBtnMin').addEventListener('click', () => {
             prefs.minimized = !prefs.minimized;
             savePrefs();
             updateMinimizedState();
         });
 
+        window.twSpForceRender = () => renderUI(true);
         updateMinimizedState();
     }
 
@@ -798,8 +909,9 @@
 
     let cachedHandAnalysis = null;
     let cachedDiscardAnalysis = null;
+    let lastRenderFingerprint = '';
 
-    function renderUI() {
+    function renderUI(force = false) {
         const container = document.getElementById('twSpContent');
         if (!container) return;
 
@@ -821,9 +933,10 @@
             return;
         }
 
-        // Caso 2: Está na Loja de Bandeiras (entre batalhas)
+        // Caso 2: Loja de Bandeiras (entre batalhas)
         if (isFlagShopActive()) {
-            const shop = window.SiegePokerFlagShop.flag_shop;
+            const fs = getSiegePokerFlagShop();
+            const shop = fs && fs.flag_shop ? fs.flag_shop : {};
             const flagsCount = shop.flags ? shop.flags.length : 0;
             const maxFlags = shop.max_amount_flags || 6;
             const freeRerolls = shop.available_free_flag_rerolls || 0;
@@ -854,23 +967,40 @@
         }
 
         // Caso 3: Batalha em Andamento
-        const sp = window.SiegePoker;
-        if (!sp || !sp.hand_cards || sp.hand_cards.length === 0) {
+        const state = getGameState();
+        const handCards = state.handCards;
+
+        // Se ainda não há cartas detectadas no DOM nem em memória
+        if (!handCards || handCards.length === 0) {
             container.innerHTML = `
-                <div style="text-align: center; padding: 20px; color: #94a3b8;">
-                    Aguardando distribuição de cartas pelo jogo...
+                <div style="text-align: center; padding: 18px; color: #94a3b8;">
+                    <div style="font-size: 26px; margin-bottom: 6px;">⏳</div>
+                    <div style="font-weight: 700; color: #f0a860; margin-bottom: 4px;">Aguardando distribuição de cartas pelo jogo...</div>
+                    <div style="font-size: 11px; color: #cbd5e1; margin-bottom: 12px;">
+                        Assim que a rodada carregar, o assistente detectará as 8 cartas automaticamente.
+                    </div>
+                    <button class="tw-sp-btn tw-sp-btn-secondary" id="twSpBtnForceDetect" style="margin: 0 auto; padding: 6px 12px;">
+                        🔄 Detectar Agora
+                    </button>
                 </div>
             `;
+            document.getElementById('twSpBtnForceDetect')?.addEventListener('click', () => renderUI(true));
             return;
         }
 
-        const handCards = sp.hand_cards;
-        const castle = sp.castle || { number: 1, defense_power: 0, difficulty_level: 1 };
-        const availableAttacks = sp.available_attacks !== undefined ? sp.available_attacks : 3;
-        const maxAttacks = sp.max_attacks || 3;
-        const freeDiscards = sp.available_free_discards !== undefined ? sp.available_free_discards : 0;
-        const remainingDeck = sp.remaining_cards_in_deck !== undefined ? sp.remaining_cards_in_deck : 44;
-        const deckCards = sp.cards_in_deck || [];
+        // Evita re-desenhar o DOM se nada mudou
+        const fingerprint = handCards.map(c => `${c.suit}_${c.rank}`).join(',') +
+            `|hp:${state.castle.defense_power}|att:${state.availableAttacks}|disc:${state.freeDiscards}|deck:${state.remainingDeck}`;
+        if (!force && fingerprint === lastRenderFingerprint) {
+            return;
+        }
+        lastRenderFingerprint = fingerprint;
+
+        const castle = state.castle;
+        const availableAttacks = state.availableAttacks;
+        const freeDiscards = state.freeDiscards;
+        const remainingDeck = state.remainingDeck;
+        const deckCards = state.deckCards;
 
         // Realiza cálculo tático
         const handAnalysis = analyzeAllHands(handCards);
@@ -898,7 +1028,7 @@
                 </div>
                 <div class="tw-sp-hud-item">
                     <span class="tw-sp-hud-label">⚔️ Ataques</span>
-                    <span class="tw-sp-hud-val ${availableAttacks > 1 ? 'green' : 'red'}">${availableAttacks}/${maxAttacks}</span>
+                    <span class="tw-sp-hud-val ${availableAttacks > 1 ? 'green' : 'red'}">${availableAttacks}/3</span>
                 </div>
                 <div class="tw-sp-hud-item">
                     <span class="tw-sp-hud-label">♻️ Descartes Grátis</span>
@@ -1020,7 +1150,6 @@
     }
 
     function bindEvents() {
-        // Selecionar Melhor Mão
         document.getElementById('twSpBtnSelectBest')?.addEventListener('click', () => {
             if (cachedHandAnalysis && cachedHandAnalysis.best) {
                 const targetCards = prefs.fullFiveCardAttack ? cachedHandAnalysis.best.fullFiveCards : cachedHandAnalysis.best.contributing;
@@ -1029,7 +1158,6 @@
             }
         });
 
-        // Atacar com Melhor Mão
         document.getElementById('twSpBtnAttackBest')?.addEventListener('click', () => {
             if (cachedHandAnalysis && cachedHandAnalysis.best) {
                 const targetCards = prefs.fullFiveCardAttack ? cachedHandAnalysis.best.fullFiveCards : cachedHandAnalysis.best.contributing;
@@ -1040,7 +1168,6 @@
             }
         });
 
-        // Marcar Descarte
         document.getElementById('twSpBtnSelectDiscard')?.addEventListener('click', () => {
             if (cachedDiscardAnalysis && cachedDiscardAnalysis.discard) {
                 selectCardsOnBoard(cachedDiscardAnalysis.discard);
@@ -1048,7 +1175,6 @@
             }
         });
 
-        // Executar Descarte Seguro
         document.getElementById('twSpBtnExecuteDiscard')?.addEventListener('click', () => {
             if (cachedDiscardAnalysis && cachedDiscardAnalysis.discard) {
                 selectCardsOnBoard(cachedDiscardAnalysis.discard);
@@ -1058,9 +1184,8 @@
             }
         });
 
-        // Clique em Mão da Lista
         document.querySelectorAll('.tw-sp-hand-row').forEach(row => {
-            row.addEventListener('click', (e) => {
+            row.addEventListener('click', () => {
                 const idx = parseInt(row.dataset.handIdx, 10);
                 if (cachedHandAnalysis && cachedHandAnalysis.allHands[idx]) {
                     const chosen = cachedHandAnalysis.allHands[idx];
@@ -1071,14 +1196,12 @@
             });
         });
 
-        // Toggle Reciclar 5 Cartas
         document.getElementById('twSpToggleFiveCard')?.addEventListener('change', (e) => {
             prefs.fullFiveCardAttack = e.target.checked;
             savePrefs();
-            renderUI();
+            renderUI(true);
         });
 
-        // Toggle Auto-Play
         document.getElementById('twSpToggleAutoPlay')?.addEventListener('change', (e) => {
             prefs.autoPlay = e.target.checked;
             savePrefs();
@@ -1098,21 +1221,17 @@
     let isAutoPlaying = false;
 
     async function runAutoPlayCycle() {
-        if (!prefs.autoPlay || isAutoPlaying || !isBattleActive()) return;
+        if (!prefs.autoPlay || isAutoPlaying) return;
+        const state = getGameState();
+        if (state.handCards.length === 0 || state.actionsDisabled) return;
         isAutoPlaying = true;
 
         try {
-            const sp = window.SiegePoker;
-            if (sp.actions_disabled) {
-                setTimeout(runAutoPlayCycle, 800);
-                return;
-            }
-
-            const handCards = sp.hand_cards;
-            const castle = sp.castle || { defense_power: 0 };
-            const freeDiscards = sp.available_free_discards || 0;
+            const handCards = state.handCards;
+            const castle = state.castle;
+            const freeDiscards = state.freeDiscards;
             const handAnalysis = analyzeAllHands(handCards);
-            const discardAnalysis = analyzeDiscardStrategy(handCards, sp.cards_in_deck || []);
+            const discardAnalysis = analyzeDiscardStrategy(handCards, state.deckCards);
 
             const best = handAnalysis.best;
             if (!best) return;
@@ -1120,36 +1239,35 @@
             // Decisão 1: Dano Letal (Derruba o castelo imediatamente)
             if (best.info.pts >= castle.defense_power) {
                 selectCardsOnBoard(prefs.fullFiveCardAttack ? best.fullFiveCards : best.contributing);
-                await delay(350);
+                await delay(400);
                 executeAttack();
                 return;
             }
 
-            // Decisão 2: Se tiver mão excelente (Trinca, Straight, Flush, Full House, etc.) -> Ataca!
+            // Decisão 2: Mão forte (>= 100 pts) -> Ataca!
             if (best.info.pts >= 100) {
                 selectCardsOnBoard(prefs.fullFiveCardAttack ? best.fullFiveCards : best.contributing);
-                await delay(350);
+                await delay(400);
                 executeAttack();
                 return;
             }
 
-            // Decisão 3: Se a mão é fraca (< 100 pts) e TEM descartes grátis -> Descarta para buscar mão maior!
+            // Decisão 3: Mão fraca (< 100 pts) e TEM descartes grátis -> Descarta!
             if (freeDiscards > 0 && discardAnalysis && discardAnalysis.discard.length > 0) {
                 selectCardsOnBoard(discardAnalysis.discard);
-                await delay(350);
+                await delay(400);
                 const ok = executeDiscard();
                 if (!ok) {
-                    // Fallback se descarte falhar: ataca com o que tiver
                     selectCardsOnBoard(prefs.fullFiveCardAttack ? best.fullFiveCards : best.contributing);
-                    await delay(300);
+                    await delay(350);
                     executeAttack();
                 }
                 return;
             }
 
-            // Decisão 4: Sem descartes grátis -> Ataca com a melhor mão disponível
+            // Decisão 4: Sem descartes grátis -> Ataca com o que tiver
             selectCardsOnBoard(prefs.fullFiveCardAttack ? best.fullFiveCards : best.contributing);
-            await delay(350);
+            await delay(400);
             executeAttack();
 
         } catch (err) {
@@ -1164,25 +1282,29 @@
     }
 
     // =========================================================================
-    // 📡 OBSERVADOR DE MUTAÇÕES DO JOGO (AUTO-REFRESH HUD)
+    // 📡 OBSERVADOR & POLLING CONTÍNUO
     // =========================================================================
 
-    function setupObserver() {
-        // Observa alterações no tabuleiro para re-renderizar o HUD instantaneamente
+    let pollInterval = null;
+
+    function setupObserverAndPolling() {
         const targetNode = document.getElementById('hand_cards') || document.getElementById('contentContainer') || document.body;
         const observer = new MutationObserver(() => {
-            // Re-renderiza com debounce
-            if (renderTimeout) clearTimeout(renderTimeout);
-            renderTimeout = setTimeout(() => {
-                renderUI();
-                if (prefs.autoPlay) {
-                    setTimeout(runAutoPlayCycle, 700);
-                }
-            }, 300);
+            renderUI();
+            if (prefs.autoPlay && !isAutoPlaying) {
+                setTimeout(runAutoPlayCycle, 500);
+            }
         });
 
-        let renderTimeout = null;
-        observer.observe(targetNode, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'data-cost'] });
+        observer.observe(targetNode, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'data-cost', 'style'] });
+
+        // Polling ativo a cada 1.2 segundos para garantir sincronismo total
+        pollInterval = setInterval(() => {
+            renderUI();
+            if (prefs.autoPlay && !isAutoPlaying) {
+                runAutoPlayCycle();
+            }
+        }, 1200);
     }
 
     // =========================================================================
@@ -1190,8 +1312,8 @@
     // =========================================================================
 
     createUI();
-    renderUI();
-    setupObserver();
+    renderUI(true);
+    setupObserverAndPolling();
 
     if (window.UI && typeof window.UI.SuccessMessage === 'function') {
         window.UI.SuccessMessage('🏰 Assistente do Póquer de Cerco carregado!', 2500);
