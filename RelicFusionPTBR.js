@@ -50,9 +50,10 @@
         fusePolished: true,
         fuseRefined: true,
         fuseSuperior: false, // Por segurança desmarcado por padrão (requer consentimento do usuário)
+        allowRandom: true,   // Permitir fusões com tipos mistos (gera relíquia aleatória de qualidade superior)
         protectFavorites: true,
-        onlyJunkMaterials: true,
-        mode: 'smart', // 'same_type', 'smart', 'junk_only', 'any'
+        onlyJunkMaterials: false,
+        mode: 'smart', // 'smart', 'same_type', 'junk_only', 'any'
         cascade: true,
         delayMs: 450
     };
@@ -775,10 +776,10 @@ ${fusionStyles}
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <label style="font-size: 12px; color: #94a3b8;">Modo de Combinação:</label>
                         <select class="tw-relic-select" id="twSelectMode">
-                            <option value="same_type">Garantido: Somente Mesmo Tipo (Sem RNG)</option>
-                            <option value="smart" selected>Inteligente: Tipo Idêntico Primeiro + Lixo Restante</option>
-                            <option value="junk_only">Limpeza de Lixo: Fundir Somente Marcadas como Lixo</option>
-                            <option value="any">Agressivo: Qualquer 3 da Mesma Qualidade</option>
+                            <option value="smart" ${userPrefs.mode === 'smart' ? 'selected' : ''}>Otimizado: Idênticas 1º + Aleatórias com as Sobras</option>
+                            <option value="same_type" ${userPrefs.mode === 'same_type' ? 'selected' : ''}>Garantido Apenas: Somente Trios Idênticos (Sem Aleatórias)</option>
+                            <option value="junk_only" ${userPrefs.mode === 'junk_only' ? 'selected' : ''}>Limpeza de Lixo: Fundir Somente Marcadas como Lixo</option>
+                            <option value="any" ${userPrefs.mode === 'any' ? 'selected' : ''}>Agressivo Total: Qualquer 3 da Mesma Qualidade</option>
                         </select>
                     </div>
                 </div>
@@ -807,13 +808,17 @@ ${fusionStyles}
 
                 <div class="tw-relic-config-row" style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px;">
                     <div class="tw-relic-checkbox-group">
+                        <label class="tw-relic-checkbox-item" title="Ao combinar 3 relíquias de tipos variados da mesma qualidade, gera uma relíquia aleatória de qualidade superior">
+                            <input type="checkbox" id="twCheckAllowRandom" ${userPrefs.allowRandom ? 'checked' : ''}>
+                            <span style="color: #38bdf8; font-weight: 700;">🎲 Permitir Fusões Aleatórias (Tipos Mistos)</span>
+                        </label>
                         <label class="tw-relic-checkbox-item" title="Nunca usa relíquias marcadas como Favorito">
                             <input type="checkbox" id="twCheckProtectFav" ${userPrefs.protectFavorites ? 'checked' : ''}>
-                            <span style="color: #facc15;">⭐ Proteger Favoritos (Inviolável)</span>
+                            <span style="color: #facc15;">⭐ Proteger Favoritos</span>
                         </label>
                         <label class="tw-relic-checkbox-item" title="Após fundir as de má qualidade, continua fundindo as novas geradas recursivamente">
                             <input type="checkbox" id="twCheckCascade" ${userPrefs.cascade ? 'checked' : ''}>
-                            <span>🔄 Fusão em Cascata (Recursiva)</span>
+                            <span>🔄 Modo Cascata</span>
                         </label>
                     </div>
                     <div style="display: flex; align-items: center; gap: 8px;">
@@ -1115,81 +1120,40 @@ ${fusionStyles}
                 }
             }
 
-            // FASE 2: Fusões com Lixo / Sobras
-            if (userPrefs.mode === 'smart' || userPrefs.mode === 'junk_only' || userPrefs.mode === 'any') {
+            // FASE 2: Fusões Aleatórias (Tipos Mistos) com as Sobras
+            // Se o modo NÃO for 'same_type' e allowRandom for true: agrupa as sobras de 3 em 3!
+            const canDoRandom = userPrefs.allowRandom && userPrefs.mode !== 'same_type';
+
+            if (canDoRandom) {
                 const remaining = qRelics.filter(r => !usedIds.has(r.id));
 
-                if (userPrefs.mode === 'smart') {
-                    // No modo inteligente: separa quem é lixo e quem é relíquia normal
-                    const nonJunk = remaining.filter(r => r.mark !== 'junk');
-                    const junkList = remaining.filter(r => r.mark === 'junk');
+                // Se houver relíquias marcadas como Lixo, coloca o lixo preferencialmente nos slots de material (mat1, mat2)
+                remaining.sort((a, b) => {
+                    if (a.mark === 'junk' && b.mark !== 'junk') return 1;
+                    if (a.mark !== 'junk' && b.mark === 'junk') return -1;
+                    return 0;
+                });
 
-                    // Prioridade 2A: 1 normal + 2 lixos
-                    while (nonJunk.length >= 1 && junkList.length >= 2) {
-                        const main = nonJunk.shift();
-                        const mat1 = junkList.shift();
-                        const mat2 = junkList.shift();
+                while (remaining.length >= 3) {
+                    const main = remaining.shift();
+                    const mat1 = remaining.shift();
+                    const mat2 = remaining.shift();
 
-                        usedIds.add(main.id);
-                        usedIds.add(mat1.id);
-                        usedIds.add(mat2.id);
+                    usedIds.add(main.id);
+                    usedIds.add(mat1.id);
+                    usedIds.add(mat2.id);
 
-                        recipes.push({
-                            id: `fusion_${main.id}_${mat1.id}_${mat2.id}`,
-                            main: main,
-                            mat1: mat1,
-                            mat2: mat2,
-                            isSameType: false,
-                            targetQuality: getNextQuality(q),
-                            targetTypeName: 'Aleatório',
-                            selected: true
-                        });
-                    }
-
-                    // Prioridade 2B: Sobraram 3 lixos? Funde lixo com lixo!
-                    while (junkList.length >= 3) {
-                        const main = junkList.shift();
-                        const mat1 = junkList.shift();
-                        const mat2 = junkList.shift();
-
-                        usedIds.add(main.id);
-                        usedIds.add(mat1.id);
-                        usedIds.add(mat2.id);
-
-                        recipes.push({
-                            id: `fusion_${main.id}_${mat1.id}_${mat2.id}`,
-                            main: main,
-                            mat1: mat1,
-                            mat2: mat2,
-                            isSameType: (main.type === mat1.type && main.type === mat2.type),
-                            targetQuality: getNextQuality(q),
-                            targetTypeName: (main.type === mat1.type && main.type === mat2.type) ? main.type_name : 'Aleatório',
-                            selected: true
-                        });
-                    }
-                } else if (userPrefs.mode === 'junk_only' || userPrefs.mode === 'any') {
-                    // Agrupa de 3 em 3 o que sobrou
-                    const list = remaining.slice();
-                    while (list.length >= 3) {
-                        const main = list.shift();
-                        const mat1 = list.shift();
-                        const mat2 = list.shift();
-
-                        usedIds.add(main.id);
-                        usedIds.add(mat1.id);
-                        usedIds.add(mat2.id);
-
-                        recipes.push({
-                            id: `fusion_${main.id}_${mat1.id}_${mat2.id}`,
-                            main: main,
-                            mat1: mat1,
-                            mat2: mat2,
-                            isSameType: (main.type === mat1.type && main.type === mat2.type),
-                            targetQuality: getNextQuality(q),
-                            targetTypeName: (main.type === mat1.type && main.type === mat2.type) ? main.type_name : 'Aleatório',
-                            selected: true
-                        });
-                    }
+                    const isSame = (main.type === mat1.type && main.type === mat2.type);
+                    recipes.push({
+                        id: `fusion_${main.id}_${mat1.id}_${mat2.id}`,
+                        main: main,
+                        mat1: mat1,
+                        mat2: mat2,
+                        isSameType: isSame,
+                        targetQuality: getNextQuality(q),
+                        targetTypeName: isSame ? main.type_name : 'Aleatório',
+                        selected: true
+                    });
                 }
             }
         }
@@ -1671,6 +1635,11 @@ ${fusionStyles}
         });
         document.getElementById('twCheckSuperior').addEventListener('change', function () {
             userPrefs.fuseSuperior = this.checked;
+            savePrefs();
+            calculateFusions();
+        });
+        document.getElementById('twCheckAllowRandom').addEventListener('change', function () {
+            userPrefs.allowRandom = this.checked;
             savePrefs();
             calculateFusions();
         });
