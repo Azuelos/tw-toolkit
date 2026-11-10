@@ -1,7 +1,7 @@
 // ===========================================================================
 // 🏰 Póquer de Cerco AI — Assistente Tático & Otimizador de Mãos e Descarte
 // Evento "Póquer de Cerco" (Siege Poker) — Tribal Wars BR143
-// Versão: 1.2.0 (Piloto Automático Mãos Livres) (Edição Oficial TW Toolkit)
+// Versão: 1.2.1 (Piloto Automático Mãos Livres) (Edição Oficial TW Toolkit)
 // Desenvolvido por: Azuelos (@jhonatanazuelosoficial)
 //
 // Uso na Barra de Acesso Rápido do Tribal Wars:
@@ -21,7 +21,7 @@
     }
 
     const SCRIPT_NAME = 'Póquer de Cerco AI';
-    const SCRIPT_VERSION = 'v1.2.0';
+    const SCRIPT_VERSION = 'v1.2.1';
     const STORAGE_KEY = 'ond_tw_siege_poker_prefs';
 
     // Definição e Constantes Oficiais do Jogo
@@ -126,10 +126,19 @@
         );
     }
 
+    function isBattleScreen() {
+        const attackBtn = document.getElementById('btn_attack');
+        const hand = document.getElementById('hand_cards');
+        return Boolean((attackBtn && attackBtn.offsetParent !== null) || (hand && hand.offsetParent !== null));
+    }
+
     function isFlagShopActive() {
-        if (document.getElementById('btn_start_battle') && document.getElementById('flags_counter')) return true;
-        const fs = getSiegePokerFlagShop();
-        return Boolean(fs && fs.flag_shop);
+        // Se a tela de batalha com botão de ataque ou cartas estiver presente, JAMAIS é Flag Shop
+        if (isBattleScreen()) return false;
+
+        const startBtn = document.getElementById('btn_start_battle');
+        const flagOffers = document.getElementById('flag_shop_offer_slot_1');
+        return Boolean((startBtn && startBtn.offsetParent !== null) || (flagOffers && flagOffers.offsetParent !== null));
     }
 
     /**
@@ -140,16 +149,20 @@
         const fs = getSiegePokerFlagShop();
 
         // 1. Extração de Cartas da Mão (Prioridade DOM com Fallback via background-image)
-        const cardElements = document.querySelectorAll('#hand_cards .card');
+        const cardElements = document.querySelectorAll('#hand_cards .card, .hand-cards .card, [id^="card_slot_"]');
         const domHand = [];
+        const seenSlots = new Set();
 
         cardElements.forEach(el => {
-            let suit = el.dataset ? el.dataset.suit : null;
-            let rank = el.dataset ? el.dataset.rank : null;
+            if (el.id && seenSlots.has(el.id)) return;
+            if (el.id) seenSlots.add(el.id);
+
+            let suit = el.dataset?.suit || el.getAttribute('data-suit');
+            let rank = el.dataset?.rank || el.getAttribute('data-rank');
 
             // Fallback via estilo se dataset ainda não tiver sido sincronizado
             if ((!suit || !rank) && el.style && el.style.backgroundImage) {
-                const m = el.style.backgroundImage.match(/cards\/([^_]+)_([^.]+)\.png/);
+                const m = el.style.backgroundImage.match(/cards\/([^_]+)_([^.]+)\.(?:png|webp)/i);
                 if (m) {
                     rank = m[1].toLowerCase();
                     suit = m[2].toLowerCase();
@@ -158,9 +171,9 @@
 
             if (suit && rank) {
                 domHand.push({
-                    suit: suit,
-                    rank: rank,
-                    modifiers: (el.dataset && el.dataset.modifier_veteran) ? ['veteran'] : [],
+                    suit: suit.toLowerCase(),
+                    rank: rank.toLowerCase(),
+                    modifiers: (el.dataset?.modifier_veteran || el.getAttribute('data-modifier_veteran')) ? ['veteran'] : [],
                     element: el
                 });
             }
@@ -526,17 +539,23 @@
 
     function selectCardsOnBoard(cardsToSelect) {
         if (!cardsToSelect || cardsToSelect.length === 0) return;
-        const targetKeys = new Set(cardsToSelect.map(c => `${c.suit}_${c.rank}`));
-        const cardElements = document.querySelectorAll('#hand_cards .card');
+        const targetKeys = new Set(cardsToSelect.map(c => `${c.suit.toLowerCase()}_${c.rank.toLowerCase()}`));
+        const cardElements = document.querySelectorAll('#hand_cards .card, .hand-cards .card, [id^="card_slot_"]');
+        const seenSlots = new Set();
 
         cardElements.forEach(el => {
-            let suit = el.dataset.suit;
-            let rank = el.dataset.rank;
+            if (el.id && seenSlots.has(el.id)) return;
+            if (el.id) seenSlots.add(el.id);
+
+            let suit = el.dataset?.suit || el.getAttribute('data-suit');
+            let rank = el.dataset?.rank || el.getAttribute('data-rank');
             if (!suit || !rank) {
-                const m = el.style.backgroundImage ? el.style.backgroundImage.match(/cards\/([^_]+)_([^.]+)\.png/) : null;
-                if (m) { rank = m[1].toLowerCase(); suit = m[2].toLowerCase(); }
+                const m = el.style.backgroundImage ? el.style.backgroundImage.match(/cards\/([^_]+)_([^.]+)\.(?:png|webp)/i) : null;
+                if (m) { rank = m[1]; suit = m[2]; }
             }
-            const key = `${suit}_${rank}`;
+            if (!suit || !rank) return;
+
+            const key = `${suit.toLowerCase()}_${rank.toLowerCase()}`;
             const isSelected = el.classList.contains('card-selected');
             if (targetKeys.has(key) && !isSelected) {
                 el.click();
@@ -1272,12 +1291,14 @@
             }
 
             // Fase B: Loja de Bandeiras (entre castelos) -> Avançar automaticamente para o próximo castelo
-            const startBattleBtn = document.getElementById('btn_start_battle');
-            if (isFlagShopActive() || (startBattleBtn && startBattleBtn.offsetParent !== null)) {
-                setAutoPilotStatus('⚔️ Iniciando próximo castelo em 1s...');
-                await delay(1000);
-                if (startBattleBtn) startBattleBtn.click();
-                return;
+            if (isFlagShopActive()) {
+                const startBattleBtn = document.getElementById('btn_start_battle');
+                if (startBattleBtn && startBattleBtn.offsetParent !== null) {
+                    setAutoPilotStatus('⚔️ Loja concluída. Iniciando próximo castelo...');
+                    await delay(1000);
+                    startBattleBtn.click();
+                    return;
+                }
             }
 
             // Fase C: Batalha em Andamento
