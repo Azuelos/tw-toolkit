@@ -4,6 +4,7 @@
 Toolkit em JavaScript (Client-side / Userscript / Quickbar) para o jogo Tribal Wars.
 
 ## Estrutura do Projeto
+- `MassBuddyAcceptPTBR.js` / `massBuddyAccept.js`: Aprovador de Amizades em Massa (Mass Buddy Approver & Invitations) — OND BR143 com interface Dark/Glassmorphism, aprovação em lote de pedidos de amizade recebidos com checkboxes individuais de desmarcação, envio em massa de convites para amigos sugeridos, cancelamento de convites enviados, jitter dinâmico anti-detecção e suporte a execução em segundo plano em qualquer tela do jogo.
 - `SiegePokerPTBR.js` / `siegePoker.js`: Póquer de Cerco AI — Assistente Tático & Otimizador de Mãos e Descarte (Siege Poker Optimizer) para o evento "Póquer de Cerco" do Tribal Wars BR143 com interface Dark/Glassmorphism, motor de cálculo exaustivo de 218 combinações de poker, seleção com 1 clique de melhor mão letal, estrategista de descarte ótimo com cálculo de outs e probabilidades (Flush Draw, Straight Draw, Trips, Pares), rastreador de baralho e modo semi-automático seguro com proteção estrita contra gasto de Pontos Premium.
 - `RelicFusionPTBR.js` / `relicFusion.js`: Fusão e Otimizador de Relíquias Inteligente (Relic Fusion Optimizer) — OND BR143 com interface neomórfica Dark, simulação de combinações, fusão em massa automática (com proteção de favoritos, modo cascata/recursivo e anti-detecção com jitter) e sincronização nativa com a Tesouraria.
 - `MassAttackPlannerPTBR.js` / `massAttackPlanner.js`: Planejador de Ataques em Massa (Mass Attack Planner) — In-game modal escuro, cálculo de velocidades e distâncias nativo, atalhos de chegada, auto-detecção de aldeias e abertura direta de Praça de Reunião com alvo pré-preenchido.
@@ -15,6 +16,15 @@ Toolkit em JavaScript (Client-side / Userscript / Quickbar) para o jogo Tribal W
 - Repositório remoto: GitHub `Azuelos/tw-toolkit` servido via CDN jsDelivr.
 
 ## Formato de Execução via Barra Rápida (Quickbar)
+
+### Aprovador de Amizades em Massa (Mass Buddy Approver):
+```javascript
+javascript:(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/gh/Azuelos/tw-toolkit@main/MassBuddyAcceptPTBR.js?_='+Date.now();document.head.appendChild(s);})();void(0);
+```
+*Ou formato alternativo via jQuery:*
+```javascript
+javascript:$.getScript("https://cdn.jsdelivr.net/gh/Azuelos/tw-toolkit@main/MassBuddyAcceptPTBR.js");void(0);
+```
 
 ### Póquer de Cerco AI (Siege Poker Optimizer):
 ```javascript
