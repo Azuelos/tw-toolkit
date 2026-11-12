@@ -1,6 +1,6 @@
 // ===========================================================================
-// 🤝 Aprovador de Amizades em Massa (Mass Buddy Approver & Invitations) — TW Toolkit
-// Versão: 1.0.0 (Edição Oficial TW Toolkit — OND BR143)
+// 🤝 Aprovador e Gerenciador de Amizades em Massa (Mass Buddy Approver & Cleaner) — TW Toolkit
+// Versão: 1.1.0 (Edição Oficial TW Toolkit — OND BR143)
 // Desenvolvido por: Azuelos (@jhonatanazuelosoficial)
 // 
 // Execução via Barra de Acesso Rápido do Tribal Wars (100% à prova de CSP):
@@ -18,19 +18,19 @@
         }
         existing.scrollIntoView({ behavior: 'smooth', block: 'center' });
         if (window.UI && typeof window.UI.InfoMessage === 'function') {
-            window.UI.InfoMessage('🤝 Aprovador de Amizades já está ativo na tela!', 2500);
+            window.UI.InfoMessage('🤝 Gerenciador de Amizades já está ativo na tela!', 2500);
         }
         return;
     }
 
-    const SCRIPT_NAME = 'Aprovador de Amizades em Massa';
-    const SCRIPT_VERSION = 'v1.0.0';
+    const SCRIPT_NAME = 'Gerenciador de Amizades em Massa';
+    const SCRIPT_VERSION = 'v1.1.0';
     const STORAGE_KEY = 'ond_tw_mass_buddy_prefs';
 
-    // Preferências padrão
+    // Preferências padrão salvas no LocalStorage
     let userPrefs = {
         delayMs: 450,
-        activeTab: 'incoming', // 'incoming' | 'suggested' | 'outgoing' | 'log'
+        activeTab: 'incoming', // 'incoming' | 'delete' | 'suggested' | 'outgoing' | 'log'
         autoSwitchToAvailable: true
     };
 
@@ -51,14 +51,16 @@
 
     // Estado da Aplicação
     let appState = {
-        incoming: [],   // Pedidos recebidos para aprovar
-        suggested: [],  // Amigos sugeridos de outros mundos/tribos
-        outgoing: [],   // Convites enviados pelo jogador
+        incoming: [],       // Pedidos recebidos para aprovar
+        currentFriends: [], // Amigos atuais para exclusão em massa
+        suggested: [],      // Amigos sugeridos de outros mundos/tribos
+        outgoing: [],       // Convites enviados pelo jogador
         isRunning: false,
         shouldCancel: false,
         activeTab: 'incoming',
         stats: {
             approved: 0,
+            deleted: 0,
             invited: 0,
             cancelled: 0,
             errors: 0
@@ -78,7 +80,7 @@
     left: 50% !important;
     transform: translateX(-50%) !important;
     width: 95vw !important;
-    max-width: 920px !important;
+    max-width: 940px !important;
     max-height: 88vh !important;
     background: linear-gradient(145deg, #070d19 0%, #0d172a 50%, #152238 100%) !important;
     border: 1px solid rgba(56, 189, 248, 0.28) !important;
@@ -213,6 +215,7 @@
     border-bottom: 1px solid rgba(56, 189, 248, 0.2) !important;
     padding: 0 16px !important;
     gap: 6px !important;
+    overflow-x: auto !important;
 }
 
 .tw-buddy-tab-btn {
@@ -220,7 +223,7 @@
     border: none !important;
     outline: none !important;
     color: #94a3b8 !important;
-    padding: 12px 16px !important;
+    padding: 12px 14px !important;
     font-size: 13px !important;
     font-weight: 700 !important;
     cursor: pointer !important;
@@ -229,6 +232,7 @@
     display: flex !important;
     align-items: center !important;
     gap: 8px !important;
+    white-space: nowrap !important;
 }
 
 .tw-buddy-tab-btn:hover {
@@ -242,6 +246,12 @@
     background: rgba(56, 189, 248, 0.06) !important;
 }
 
+.tw-buddy-tab-btn.tab-danger.active {
+    color: #f87171 !important;
+    border-bottom-color: #ef4444 !important;
+    background: rgba(239, 68, 68, 0.08) !important;
+}
+
 .tw-buddy-tab-badge {
     padding: 2px 7px !important;
     border-radius: 999px !important;
@@ -253,6 +263,11 @@
 
 .tw-buddy-tab-btn.active .tw-buddy-tab-badge {
     background: #0284c7 !important;
+    color: #ffffff !important;
+}
+
+.tw-buddy-tab-btn.tab-danger.active .tw-buddy-tab-badge {
+    background: #ef4444 !important;
     color: #ffffff !important;
 }
 
@@ -280,6 +295,19 @@
 }
 .tw-buddy-body::-webkit-scrollbar-thumb:hover {
     background: #0284c7 !important;
+}
+
+/* Info Banner */
+.tw-buddy-alert-banner {
+    background: rgba(239, 68, 68, 0.1) !important;
+    border: 1px solid rgba(239, 68, 68, 0.3) !important;
+    border-radius: 8px !important;
+    padding: 10px 14px !important;
+    font-size: 12px !important;
+    color: #fca5a5 !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
 }
 
 /* Control Toolbar */
@@ -320,6 +348,12 @@
 .tw-buddy-btn-sm:hover:not(:disabled) {
     background: rgba(56, 189, 248, 0.2) !important;
     border-color: #38bdf8 !important;
+    color: #ffffff !important;
+}
+
+.tw-buddy-btn-sm.btn-danger:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.25) !important;
+    border-color: #f87171 !important;
     color: #ffffff !important;
 }
 
@@ -373,6 +407,16 @@
     border-color: rgba(56, 189, 248, 0.3) !important;
 }
 
+.tw-buddy-card.marked-for-delete {
+    background: rgba(127, 29, 29, 0.18) !important;
+    border-color: rgba(239, 68, 68, 0.35) !important;
+}
+
+.tw-buddy-card.keep-friend {
+    background: rgba(22, 101, 52, 0.15) !important;
+    border-color: rgba(34, 197, 94, 0.35) !important;
+}
+
 .tw-buddy-card.success {
     border-color: rgba(74, 222, 128, 0.4) !important;
     background: rgba(22, 101, 52, 0.2) !important;
@@ -381,7 +425,7 @@
 
 .tw-buddy-card.error {
     border-color: rgba(239, 68, 68, 0.4) !important;
-    background: rgba(127, 29, 29, 0.2) !important;
+    background: rgba(127, 29, 29, 0.25) !important;
 }
 
 .tw-buddy-card-left {
@@ -393,10 +437,14 @@
 }
 
 .tw-buddy-check {
-    width: 17px !important;
-    height: 17px !important;
+    width: 18px !important;
+    height: 18px !important;
     accent-color: #0284c7 !important;
     cursor: pointer !important;
+}
+
+.tw-buddy-check.check-danger {
+    accent-color: #ef4444 !important;
 }
 
 .tw-buddy-avatar {
@@ -408,10 +456,26 @@
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    font-size: 16px !important;
+    font-size: 15px !important;
     color: #38bdf8 !important;
     font-weight: 800 !important;
     flex-shrink: 0 !important;
+    position: relative !important;
+}
+
+.tw-buddy-avatar.danger {
+    border-color: #ef4444 !important;
+    color: #f87171 !important;
+}
+
+.tw-buddy-avatar .online-indicator {
+    position: absolute !important;
+    bottom: -1px !important;
+    right: -1px !important;
+    width: 10px !important;
+    height: 10px !important;
+    border-radius: 50% !important;
+    border: 2px solid #070d19 !important;
 }
 
 .tw-buddy-info {
@@ -439,7 +503,7 @@
     color: #94a3b8 !important;
     display: flex !important;
     align-items: center !important;
-    gap: 8px !important;
+    gap: 6px !important;
     flex-wrap: wrap !important;
 }
 
@@ -464,12 +528,25 @@
     display: flex !important;
     align-items: center !important;
     gap: 4px !important;
+    white-space: nowrap !important;
 }
 
 .tw-buddy-badge-pending {
     background: rgba(56, 189, 248, 0.15) !important;
     color: #38bdf8 !important;
     border: 1px solid rgba(56, 189, 248, 0.3) !important;
+}
+
+.tw-buddy-badge-danger {
+    background: rgba(239, 68, 68, 0.15) !important;
+    color: #f87171 !important;
+    border: 1px solid rgba(239, 68, 68, 0.3) !important;
+}
+
+.tw-buddy-badge-keep {
+    background: rgba(34, 197, 94, 0.15) !important;
+    color: #4ade80 !important;
+    border: 1px solid rgba(34, 197, 94, 0.3) !important;
 }
 
 .tw-buddy-badge-ok {
@@ -532,6 +609,11 @@
     box-shadow: 0 0 10px #38bdf8 !important;
 }
 
+.tw-buddy-progress-bar.danger {
+    background: linear-gradient(90deg, #dc2626 0%, #f87171 100%) !important;
+    box-shadow: 0 0 10px #ef4444 !important;
+}
+
 /* Actions Footer */
 .tw-buddy-actions {
     background: rgba(9, 20, 38, 0.95) !important;
@@ -584,6 +666,13 @@
 .tw-buddy-btn-danger {
     background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
     color: #ffffff !important;
+    box-shadow: 0 4px 14px rgba(220, 38, 38, 0.4) !important;
+}
+
+.tw-buddy-btn-danger:hover:not(:disabled) {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+    box-shadow: 0 6px 18px rgba(239, 68, 68, 0.5) !important;
+    transform: translateY(-1px) !important;
 }
 
 .tw-buddy-btn-secondary {
@@ -641,7 +730,7 @@ ${massBuddyStyles}
     <div class="tw-buddy-header" id="twBuddyHeader">
         <div class="tw-buddy-title">
             <span style="font-size: 20px;">🤝</span>
-            <span>Aprovador de Amizades em Massa</span>
+            <span>Gerenciador de Amizades em Massa</span>
             <span class="version-badge">${SCRIPT_VERSION}</span>
             <span style="font-size: 11px; color: #94a3b8; font-weight: 500;">OND BR143</span>
         </div>
@@ -658,6 +747,10 @@ ${massBuddyStyles}
             <span class="tw-buddy-stat-val" id="twStatIncoming">0</span>
         </div>
         <div class="tw-buddy-stat-box">
+            <span class="tw-buddy-stat-label">Amigos Atuais:</span>
+            <span class="tw-buddy-stat-val" style="color: #f87171;" id="twStatCurrent">0</span>
+        </div>
+        <div class="tw-buddy-stat-box">
             <span class="tw-buddy-stat-label">Amigos Sugeridos:</span>
             <span class="tw-buddy-stat-val" style="color: #4ade80;" id="twStatSuggested">0</span>
         </div>
@@ -666,8 +759,8 @@ ${massBuddyStyles}
             <span class="tw-buddy-stat-val" style="color: #facc15;" id="twStatOutgoing">0</span>
         </div>
         <div class="tw-buddy-stat-box">
-            <span class="tw-buddy-stat-label">Aprovados Nesta Sessão:</span>
-            <span class="tw-buddy-stat-val" style="color: #a855f7;" id="twStatSessionApproved">0</span>
+            <span class="tw-buddy-stat-label">Ações na Sessão:</span>
+            <span class="tw-buddy-stat-val" style="color: #a855f7;" id="twStatSessionActions">0</span>
         </div>
     </div>
 
@@ -676,6 +769,10 @@ ${massBuddyStyles}
         <button class="tw-buddy-tab-btn active" data-tab="incoming">
             <span>📥 Pedidos Recebidos</span>
             <span class="tw-buddy-tab-badge" id="twTabBadgeIncoming">0</span>
+        </button>
+        <button class="tw-buddy-tab-btn tab-danger" data-tab="delete">
+            <span>🗑️ Excluir Amigos</span>
+            <span class="tw-buddy-tab-badge" id="twTabBadgeDelete">0</span>
         </button>
         <button class="tw-buddy-tab-btn" data-tab="suggested">
             <span>💡 Amigos Sugeridos</span>
@@ -693,6 +790,16 @@ ${massBuddyStyles}
 
     <!-- Corpo -->
     <div class="tw-buddy-body" id="twBuddyBody">
+        <!-- Banner de Ajuda para a Aba de Exclusão -->
+        <div class="tw-buddy-alert-banner" id="twBannerDeleteHelp" style="display: none;">
+            <span style="font-size: 18px;">💡</span>
+            <div>
+                <b>Como funciona a exclusão em massa:</b> Todos os amigos vêm marcados. 
+                <b><u>Desmarque</u> os amigos que você deseja MANTER</b>. 
+                Os amigos que continuarem marcados serão excluídos permanentemente ao clicar no botão abaixo.
+            </div>
+        </div>
+
         <!-- Barra de Ferramentas / Filtros -->
         <div class="tw-buddy-toolbar">
             <div class="tw-buddy-toolbar-left">
@@ -728,24 +835,29 @@ ${massBuddyStyles}
             <div class="tw-buddy-list" id="twListIncoming"></div>
         </div>
 
-        <!-- Painel Aba 2: Amigos Sugeridos -->
+        <!-- Painel Aba 2: Excluir Amigos -->
+        <div id="twPaneDelete" class="tw-buddy-tab-pane" style="display: none;">
+            <div class="tw-buddy-list" id="twListDelete"></div>
+        </div>
+
+        <!-- Painel Aba 3: Amigos Sugeridos -->
         <div id="twPaneSuggested" class="tw-buddy-tab-pane" style="display: none;">
             <div class="tw-buddy-list" id="twListSuggested"></div>
         </div>
 
-        <!-- Painel Aba 3: Convites Enviados -->
+        <!-- Painel Aba 4: Convites Enviados -->
         <div id="twPaneOutgoing" class="tw-buddy-tab-pane" style="display: none;">
             <div class="tw-buddy-list" id="twListOutgoing"></div>
         </div>
 
-        <!-- Painel Aba 4: Logs -->
+        <!-- Painel Aba 5: Logs -->
         <div id="twPaneLog" class="tw-buddy-tab-pane" style="display: none;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                 <span style="font-size: 12px; font-weight: 700; color: #bae6fd;">Histórico de Ações da Sessão</span>
                 <button class="tw-buddy-btn-sm" id="twBtnClearLog">🗑️ Limpar Log</button>
             </div>
             <div class="tw-buddy-log-box" id="twLogBox">
-                <div class="tw-buddy-log-item tw-buddy-log-info">[Inicialização] Script carregado e pronto para execução.</div>
+                <div class="tw-buddy-log-item tw-buddy-log-info">[Inicialização] Gerenciador pronto para uso.</div>
             </div>
         </div>
     </div>
@@ -802,7 +914,6 @@ ${massBuddyStyles}
     async function loadBuddiesData() {
         const villageId = (window.game_data && window.game_data.village && window.game_data.village.id) || '';
         const currentScreen = (window.game_data && window.game_data.screen) || '';
-        const csrf = (window.game_data && window.game_data.csrf) || '';
 
         addLog('Carregando dados de amigos...', 'info');
 
@@ -851,15 +962,12 @@ ${massBuddyStyles}
             const href = link.getAttribute('href') || '';
             const tr = link.closest('tr');
 
-            // ID do pedido / buddy
             const buddyMatch = href.match(/buddy_id=(\d+)/);
             const buddyId = buddyMatch ? buddyMatch[1] : '';
 
-            // Token CSRF
             const hMatch = href.match(/h=([a-f0-9]+)/);
             const h = hMatch ? hMatch[1] : csrf;
 
-            // Jogador que enviou
             let playerName = 'Jogador';
             let playerId = '';
             let playerUrl = '#';
@@ -874,7 +982,6 @@ ${massBuddyStyles}
                 }
             }
 
-            // Link de recusa caso exista
             let rejectUrl = '';
             if (tr) {
                 const rLink = tr.querySelector('a[href*="action=reject_buddy"]');
@@ -898,7 +1005,72 @@ ${massBuddyStyles}
             });
         });
 
-        // 2. EXTRAÇÃO DE AMIGOS SUGERIDOS (#contact_list_table tr.contact_entry)
+        // 2. EXTRAÇÃO DE AMIGOS ATUAIS (a[href*="action=delete_buddy"])
+        const currentFriendsList = [];
+        const deleteLinks = doc.querySelectorAll('a[href*="action=delete_buddy"]');
+
+        deleteLinks.forEach((link, idx) => {
+            const href = link.getAttribute('href') || '';
+            const tr = link.closest('tr');
+
+            const buddyMatch = href.match(/buddy_id=(\d+)/);
+            const buddyId = buddyMatch ? buddyMatch[1] : '';
+
+            const hMatch = href.match(/h=([a-f0-9]+)/);
+            const h = hMatch ? hMatch[1] : csrf;
+
+            let playerName = 'Amigo';
+            let playerId = '';
+            let playerUrl = '#';
+            let isOnline = false;
+            let points = '-';
+            let villages = '-';
+            let allyName = '-';
+
+            if (tr) {
+                const pLink = tr.querySelector('a[href*="screen=info_player"]');
+                if (pLink) {
+                    playerName = pLink.textContent.trim();
+                    playerUrl = pLink.getAttribute('href');
+                    const idMatch = playerUrl.match(/id=(\d+)/);
+                    if (idMatch) playerId = idMatch[1];
+                }
+
+                const onlineImg = tr.querySelector('img[src*="green.webp"], img[src*="red.webp"]');
+                if (onlineImg) {
+                    isOnline = onlineImg.getAttribute('src').includes('green.webp');
+                }
+
+                const cells = tr.querySelectorAll('td');
+                if (cells.length >= 6) {
+                    points = cells[4].textContent.trim();
+                    villages = cells[5].textContent.trim();
+                }
+
+                const allyLink = tr.querySelector('a[href*="screen=info_ally"]');
+                if (allyLink) {
+                    allyName = allyLink.textContent.trim();
+                }
+            }
+
+            currentFriendsList.push({
+                id: `cur_${buddyId || idx}`,
+                buddyId: buddyId,
+                h: h,
+                playerName: playerName,
+                playerId: playerId,
+                playerUrl: playerUrl,
+                deleteUrl: href,
+                isOnline: isOnline,
+                points: points,
+                villages: villages,
+                allyName: allyName,
+                selected: true, // Começa MARCADO por padrão: o usuário desmarca quem deseja manter!
+                status: 'pending'
+            });
+        });
+
+        // 3. EXTRAÇÃO DE AMIGOS SUGERIDOS (#contact_list_table tr.contact_entry)
         const suggestedList = [];
         const contactEntries = doc.querySelectorAll('#contact_list_table tr.contact_entry, tr.contact_entry');
 
@@ -921,7 +1093,6 @@ ${massBuddyStyles}
             const form = tr.querySelector('form[action*="add_buddy"]');
             const formAction = form ? form.getAttribute('action') : `/game.php?village=${villageId}&screen=buddies&action=add_buddy&h=${csrf}`;
 
-            // Metadados (Mundo, Tribo, Último contato)
             const cells = tr.querySelectorAll('td');
             let world = cells.length > 1 ? cells[1].textContent.trim() : '';
             let tribe = cells.length > 2 ? cells[2].textContent.trim() : '-';
@@ -941,7 +1112,7 @@ ${massBuddyStyles}
             });
         });
 
-        // 3. EXTRAÇÃO DE CONVITES ENVIADOS (Seus Convites - a[href*="action=cancel_buddy"])
+        // 4. EXTRAÇÃO DE CONVITES ENVIADOS (Seus Convites - a[href*="action=cancel_buddy"])
         const outgoingList = [];
         const cancelLinks = doc.querySelectorAll('a[href*="action=cancel_buddy"]');
 
@@ -973,35 +1144,31 @@ ${massBuddyStyles}
                 playerId: playerId,
                 playerUrl: playerUrl,
                 cancelUrl: href,
-                selected: false, // Desmarcado por padrão por segurança
+                selected: false,
                 status: 'pending'
             });
         });
 
         appState.incoming = incomingList;
+        appState.currentFriends = currentFriendsList;
         appState.suggested = suggestedList;
         appState.outgoing = outgoingList;
 
         // Atualiza contadores
         document.getElementById('twStatIncoming').textContent = incomingList.length;
+        document.getElementById('twStatCurrent').textContent = currentFriendsList.length;
         document.getElementById('twStatSuggested').textContent = suggestedList.length;
         document.getElementById('twStatOutgoing').textContent = outgoingList.length;
 
         document.getElementById('twTabBadgeIncoming').textContent = incomingList.length;
+        document.getElementById('twTabBadgeDelete').textContent = currentFriendsList.length;
         document.getElementById('twTabBadgeSuggested').textContent = suggestedList.length;
         document.getElementById('twTabBadgeOutgoing').textContent = outgoingList.length;
-
-        // Se houver pedidos recebidos, abre a aba de pedidos recebidos; se não houver, mas houver sugeridos, sugere a aba
-        if (incomingList.length > 0) {
-            switchTab('incoming');
-        } else if (suggestedList.length > 0 && appState.activeTab === 'incoming') {
-            // Mantém ou permite o usuário navegar
-        }
 
         renderCurrentTab();
         updateActionButton();
 
-        addLog(`Leitura concluída: ${incomingList.length} pedidos recebidos, ${suggestedList.length} amigos sugeridos, ${outgoingList.length} convites enviados.`, 'ok');
+        addLog(`Leitura concluída: ${incomingList.length} pedidos recebidos, ${currentFriendsList.length} amigos atuais, ${suggestedList.length} sugeridos, ${outgoingList.length} convites enviados.`, 'ok');
     }
 
     // ===========================================================================
@@ -1012,6 +1179,8 @@ ${massBuddyStyles}
 
         if (appState.activeTab === 'incoming') {
             renderIncomingList(query);
+        } else if (appState.activeTab === 'delete') {
+            renderDeleteList(query);
         } else if (appState.activeTab === 'suggested') {
             renderSuggestedList(query);
         } else if (appState.activeTab === 'outgoing') {
@@ -1019,6 +1188,7 @@ ${massBuddyStyles}
         }
     }
 
+    // Aba 1: Pedidos Recebidos
     function renderIncomingList(filter = '') {
         const container = document.getElementById('twListIncoming');
         if (!container) return;
@@ -1043,7 +1213,7 @@ ${massBuddyStyles}
         }
 
         let html = '';
-        list.forEach((item, idx) => {
+        list.forEach((item) => {
             const isDone = item.status === 'success';
             const isErr = item.status === 'error';
 
@@ -1068,7 +1238,7 @@ ${massBuddyStyles}
                     ${statusBadge}
                     ${!isDone && !appState.isRunning ? `
                         <button class="tw-buddy-btn-sm" data-action="single-accept" data-id="${item.id}" title="Aprovar apenas este agora">✓ Aceitar</button>
-                        <button class="tw-buddy-btn-sm" data-action="single-reject" data-id="${item.id}" title="Recusar este pedido" style="color: #f87171;">✕ Recusar</button>
+                        <button class="tw-buddy-btn-sm btn-danger" data-action="single-reject" data-id="${item.id}" title="Recusar este pedido" style="color: #f87171;">✕ Recusar</button>
                     ` : ''}
                 </div>
             </div>
@@ -1079,13 +1249,96 @@ ${massBuddyStyles}
         attachItemEventListeners(container, appState.incoming);
     }
 
+    // Aba 2: Excluir Amigos (NOVA)
+    function renderDeleteList(filter = '') {
+        const container = document.getElementById('twListDelete');
+        if (!container) return;
+
+        let list = appState.currentFriends;
+        if (filter) {
+            list = list.filter(item => 
+                item.playerName.toLowerCase().includes(filter) || 
+                item.allyName.toLowerCase().includes(filter)
+            );
+        }
+
+        if (list.length === 0) {
+            container.innerHTML = `
+                <div class="tw-buddy-empty">
+                    <span style="font-size: 26px;">🤝</span><br>
+                    <b>Nenhum amigo encontrado na sua lista.</b>
+                </div>
+            `;
+            return;
+        }
+
+        let html = '';
+        list.forEach((item) => {
+            const isDone = item.status === 'success';
+            const isErr = item.status === 'error';
+            const isMarked = item.selected;
+
+            let cardClass = isDone ? 'success' : (isErr ? 'error' : (isMarked ? 'marked-for-delete' : 'keep-friend'));
+
+            let statusBadge = '';
+            if (isDone) {
+                statusBadge = `<span class="tw-buddy-badge-status tw-buddy-badge-ok">✅ Excluído</span>`;
+            } else if (isErr) {
+                statusBadge = `<span class="tw-buddy-badge-status tw-buddy-badge-err">❌ Falha</span>`;
+            } else if (isMarked) {
+                statusBadge = `<span class="tw-buddy-badge-status tw-buddy-badge-danger">🗑️ Marcar para Excluir</span>`;
+            } else {
+                statusBadge = `<span class="tw-buddy-badge-status tw-buddy-badge-keep">🛡️ Manter Amigo</span>`;
+            }
+
+            const indicatorColor = item.isOnline ? '#22c55e' : '#64748b';
+
+            html += `
+            <div class="tw-buddy-card ${cardClass}" id="card_${item.id}">
+                <div class="tw-buddy-card-left">
+                    <input type="checkbox" class="tw-buddy-check check-danger" data-id="${item.id}" ${item.selected ? 'checked' : ''} ${isDone || appState.isRunning ? 'disabled' : ''} title="Desmarque se quiser continuar amigo deste jogador">
+                    <div class="tw-buddy-avatar danger">
+                        ${item.playerName.charAt(0).toUpperCase()}
+                        <span class="online-indicator" style="background: ${indicatorColor};" title="${item.isOnline ? 'Online agora' : 'Offline'}"></span>
+                    </div>
+                    <div class="tw-buddy-info">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <a href="${item.playerUrl}" target="_blank" class="tw-buddy-player-name">${item.playerName}</a>
+                            ${item.isOnline ? '<span style="font-size: 10px; color: #4ade80; font-weight: 700;">[Online]</span>' : ''}
+                        </div>
+                        <div class="tw-buddy-meta">
+                            <span class="tw-buddy-meta-pill" style="color: #38bdf8;">⭐ ${item.points} pts</span>
+                            <span class="tw-buddy-meta-pill" style="color: #cbd5e1;">🏰 ${item.villages} aldeias</span>
+                            ${item.allyName && item.allyName !== '-' ? `<span class="tw-buddy-meta-pill" style="color: #facc15;">🛡️ ${item.allyName}</span>` : ''}
+                        </div>
+                    </div>
+                </div>
+                <div class="tw-buddy-card-right">
+                    ${statusBadge}
+                    ${!isDone && !appState.isRunning ? `
+                        <button class="tw-buddy-btn-sm btn-danger" data-action="single-delete" data-id="${item.id}" title="Excluir este amigo agora" style="color: #f87171;">🗑️ Excluir</button>
+                    ` : ''}
+                </div>
+            </div>
+            `;
+        });
+
+        container.innerHTML = html;
+        attachItemEventListeners(container, appState.currentFriends);
+    }
+
+    // Aba 3: Amigos Sugeridos
     function renderSuggestedList(filter = '') {
         const container = document.getElementById('twListSuggested');
         if (!container) return;
 
         let list = appState.suggested;
         if (filter) {
-            list = list.filter(item => item.playerName.toLowerCase().includes(filter) || item.world.toLowerCase().includes(filter) || item.tribe.toLowerCase().includes(filter));
+            list = list.filter(item => 
+                item.playerName.toLowerCase().includes(filter) || 
+                item.world.toLowerCase().includes(filter) || 
+                item.tribe.toLowerCase().includes(filter)
+            );
         }
 
         if (list.length === 0) {
@@ -1134,6 +1387,7 @@ ${massBuddyStyles}
         attachItemEventListeners(container, appState.suggested);
     }
 
+    // Aba 4: Convites Enviados
     function renderOutgoingList(filter = '') {
         const container = document.getElementById('twListOutgoing');
         if (!container) return;
@@ -1171,7 +1425,7 @@ ${massBuddyStyles}
                 </div>
                 <div class="tw-buddy-card-right">
                     ${isDone ? `<span class="tw-buddy-badge-status tw-buddy-badge-ok">Cancelado</span>` : `
-                        <button class="tw-buddy-btn-sm" data-action="single-cancel" data-id="${item.id}" style="color: #f87171;">✕ Cancelar Convite</button>
+                        <button class="tw-buddy-btn-sm btn-danger" data-action="single-cancel" data-id="${item.id}" style="color: #f87171;">✕ Cancelar Convite</button>
                     `}
                 </div>
             </div>
@@ -1191,6 +1445,7 @@ ${massBuddyStyles}
                 if (found) {
                     found.selected = this.checked;
                 }
+                renderCurrentTab();
                 updateActionButton();
             });
         });
@@ -1212,6 +1467,12 @@ ${massBuddyStyles}
                     await executeSingleReject(item);
                     renderCurrentTab();
                     updateActionButton();
+                } else if (action === 'single-delete') {
+                    if (confirm(`Tem certeza que deseja remover ${item.playerName} da sua lista de amigos?`)) {
+                        await executeSingleDelete(item);
+                        renderCurrentTab();
+                        updateActionButton();
+                    }
                 } else if (action === 'single-invite') {
                     await executeSingleInvite(item);
                     renderCurrentTab();
@@ -1230,12 +1491,16 @@ ${massBuddyStyles}
         if (!btn) return;
 
         let selectedCount = 0;
-        let actionLabel = 'Aprovar Selecionados';
+        let actionLabel = 'Executar Ação';
 
         if (appState.activeTab === 'incoming') {
             selectedCount = appState.incoming.filter(x => x.selected && x.status !== 'success').length;
             actionLabel = `⚡ Aprovar Pedidos Selecionados (${selectedCount})`;
             btn.className = 'tw-buddy-btn tw-buddy-btn-success';
+        } else if (appState.activeTab === 'delete') {
+            selectedCount = appState.currentFriends.filter(x => x.selected && x.status !== 'success').length;
+            actionLabel = `🗑️ Excluir Amigos Selecionados (${selectedCount})`;
+            btn.className = 'tw-buddy-btn tw-buddy-btn-danger';
         } else if (appState.activeTab === 'suggested') {
             selectedCount = appState.suggested.filter(x => x.selected && x.status !== 'success').length;
             actionLabel = `➕ Enviar Pedidos para Selecionados (${selectedCount})`;
@@ -1248,6 +1513,13 @@ ${massBuddyStyles}
 
         btn.disabled = selectedCount === 0 || appState.isRunning;
         btn.innerHTML = `<span>${actionLabel}</span>`;
+
+        // Atualiza estatística de ações da sessão
+        const totalSessionActions = appState.stats.approved + appState.stats.deleted + appState.stats.invited + appState.stats.cancelled;
+        const statActionsEl = document.getElementById('twStatSessionActions');
+        if (statActionsEl) {
+            statActionsEl.textContent = totalSessionActions;
+        }
     }
 
     // ===========================================================================
@@ -1263,7 +1535,6 @@ ${massBuddyStyles}
 
             item.status = 'success';
             appState.stats.approved++;
-            document.getElementById('twStatSessionApproved').textContent = appState.stats.approved;
             addLog(`✅ Pedido de ${item.playerName} aprovado com sucesso!`, 'ok');
             return true;
         } catch (err) {
@@ -1289,6 +1560,40 @@ ${massBuddyStyles}
         } catch (err) {
             console.error('Erro ao recusar amizade:', err);
             item.status = 'error';
+            return false;
+        }
+    }
+
+    async function executeSingleDelete(item) {
+        addLog(`Excluindo amigo: ${item.playerName}...`, 'warn');
+        try {
+            await $.ajax({
+                url: item.deleteUrl,
+                type: 'GET'
+            });
+
+            item.status = 'success';
+            appState.stats.deleted++;
+            addLog(`🗑️ ${item.playerName} removido da lista de amigos com sucesso!`, 'ok');
+
+            // Atualização visual nativa no DOM do jogo se estiver na tela de amigos
+            if (window.game_data && window.game_data.screen === 'buddies') {
+                const nativeLink = document.querySelector(`a[href*="delete_buddy"][href*="buddy_id=${item.buddyId}"]`);
+                if (nativeLink) {
+                    const tr = nativeLink.closest('tr');
+                    if (tr) {
+                        tr.style.opacity = '0.35';
+                        tr.style.textDecoration = 'line-through';
+                    }
+                }
+            }
+
+            return true;
+        } catch (err) {
+            console.error('Erro ao excluir amigo:', err);
+            item.status = 'error';
+            appState.stats.errors++;
+            addLog(`❌ Falha ao excluir amigo ${item.playerName}`, 'err');
             return false;
         }
     }
@@ -1352,6 +1657,19 @@ ${massBuddyStyles}
             queue = appState.incoming.filter(x => x.selected && x.status !== 'success');
             execFn = executeSingleApprove;
             actionWord = 'Aprovando pedidos';
+        } else if (appState.activeTab === 'delete') {
+            queue = appState.currentFriends.filter(x => x.selected && x.status !== 'success');
+            execFn = executeSingleDelete;
+            actionWord = 'Excluindo amigos';
+
+            // Confirmação de segurança contra exclusão acidental
+            const count = queue.length;
+            const msg = `⚠️ ATENÇÃO: Você selecionou ${count} amigo(s) para remoção permanente.\n\n` +
+                        `Os amigos que você DESMARCOU continuarão na sua lista de amigos.\n\n` +
+                        `Deseja realmente excluir os ${count} amigos selecionados agora?`;
+            if (!confirm(msg)) {
+                return;
+            }
         } else if (appState.activeTab === 'suggested') {
             queue = appState.suggested.filter(x => x.selected && x.status !== 'success');
             execFn = executeSingleInvite;
@@ -1375,6 +1693,12 @@ ${massBuddyStyles}
         const progressBar = document.getElementById('twProgressBar');
         const progressStatus = document.getElementById('twProgressStatus');
         const progressCount = document.getElementById('twProgressCount');
+
+        if (appState.activeTab === 'delete') {
+            progressBar.classList.add('danger');
+        } else {
+            progressBar.classList.remove('danger');
+        }
 
         progressContainer.style.display = 'flex';
 
@@ -1454,9 +1778,16 @@ ${massBuddyStyles}
         });
 
         document.getElementById('twPaneIncoming').style.display = tabKey === 'incoming' ? 'block' : 'none';
+        document.getElementById('twPaneDelete').style.display = tabKey === 'delete' ? 'block' : 'none';
         document.getElementById('twPaneSuggested').style.display = tabKey === 'suggested' ? 'block' : 'none';
         document.getElementById('twPaneOutgoing').style.display = tabKey === 'outgoing' ? 'block' : 'none';
         document.getElementById('twPaneLog').style.display = tabKey === 'log' ? 'block' : 'none';
+
+        // Mostra o banner explicativo quando estiver na aba de exclusão
+        const bannerDelete = document.getElementById('twBannerDeleteHelp');
+        if (bannerDelete) {
+            bannerDelete.style.display = tabKey === 'delete' ? 'flex' : 'none';
+        }
 
         renderCurrentTab();
         updateActionButton();
@@ -1609,6 +1940,7 @@ ${massBuddyStyles}
 
     function getCurrentTargetList() {
         if (appState.activeTab === 'incoming') return appState.incoming;
+        if (appState.activeTab === 'delete') return appState.currentFriends;
         if (appState.activeTab === 'suggested') return appState.suggested;
         if (appState.activeTab === 'outgoing') return appState.outgoing;
         return [];
