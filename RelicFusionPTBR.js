@@ -1068,17 +1068,19 @@ ${fusionStyles}
             pool = pool.filter(r => r.mark === 'junk');
         }
 
-        const recipes = [];
+        const sameTypeRecipes = [];
+        const randomRecipes = [];
         const usedIds = new Set();
 
-        // Processa qualidade por qualidade em ordem (shoddy -> polished -> refined -> superior)
-        for (const q of allowedQualities) {
-            const qRelics = pool.filter(r => r.quality === q && !usedIds.has(r.id));
-            if (qRelics.length < 3) continue;
+        // =======================================================================
+        // ETAPA 1 (PRIORIDADE ABSOLUTA): FUSÕES DE MESMO TIPO (IGUAIS / GARANTIDAS)
+        // Varre TODAS as qualidades permitidas procurando trios idênticos primeiro!
+        // =======================================================================
+        if (userPrefs.mode !== 'junk_only') {
+            for (const q of allowedQualities) {
+                const qRelics = pool.filter(r => r.quality === q && !usedIds.has(r.id));
+                if (qRelics.length < 3) continue;
 
-            // FASE 1: Fusões Perfeitas (Mesmo Tipo)
-            // Se o modo for 'same_type', 'smart' ou 'any', procuramos trios idênticos primeiro
-            if (userPrefs.mode !== 'junk_only') {
                 const byType = {};
                 for (const r of qRelics) {
                     if (usedIds.has(r.id)) continue;
@@ -1106,7 +1108,7 @@ ${fusionStyles}
 
                         const nextQuality = getNextQuality(q);
 
-                        recipes.push({
+                        sameTypeRecipes.push({
                             id: `fusion_${main.id}_${mat1.id}_${mat2.id}`,
                             main: main,
                             mat1: mat1,
@@ -1119,13 +1121,18 @@ ${fusionStyles}
                     }
                 }
             }
+        }
 
-            // FASE 2: Fusões Aleatórias (Tipos Mistos) com as Sobras
-            // Se o modo NÃO for 'same_type' e allowRandom for true: agrupa as sobras de 3 em 3!
-            const canDoRandom = userPrefs.allowRandom && userPrefs.mode !== 'same_type';
+        // =======================================================================
+        // ETAPA 2 (PRIORIDADE 2): FUSÕES ALEATÓRIAS (TIPOS MISTOS) COM AS SOBRAS
+        // Só é executada após esgotar TODOS os trios idênticos de todas as qualidades!
+        // =======================================================================
+        const canDoRandom = userPrefs.allowRandom && userPrefs.mode !== 'same_type';
 
-            if (canDoRandom) {
-                const remaining = qRelics.filter(r => !usedIds.has(r.id));
+        if (canDoRandom) {
+            for (const q of allowedQualities) {
+                const remaining = pool.filter(r => r.quality === q && !usedIds.has(r.id));
+                if (remaining.length < 3) continue;
 
                 // Se houver relíquias marcadas como Lixo, coloca o lixo preferencialmente nos slots de material (mat1, mat2)
                 remaining.sort((a, b) => {
@@ -1144,7 +1151,7 @@ ${fusionStyles}
                     usedIds.add(mat2.id);
 
                     const isSame = (main.type === mat1.type && main.type === mat2.type);
-                    recipes.push({
+                    randomRecipes.push({
                         id: `fusion_${main.id}_${mat1.id}_${mat2.id}`,
                         main: main,
                         mat1: mat1,
@@ -1157,6 +1164,9 @@ ${fusionStyles}
                 }
             }
         }
+
+        // Concatena priorizando estritamente as IDÊNTICAS PRIMEIRO, seguidas pelas aleatórias
+        const recipes = [...sameTypeRecipes, ...randomRecipes];
 
         appState.plannedFusions = recipes;
         document.getElementById('twStatPossible').textContent = recipes.length;
@@ -1202,8 +1212,8 @@ ${fusionStyles}
             const outcomeName = QUALITY_LABELS[f.targetQuality] || f.targetQuality;
 
             const badgeType = f.isSameType 
-                ? `<span class="tw-relic-outcome-badge" style="background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid #22c55e;">🎯 Garantido: ${f.targetTypeName} [${outcomeName}]</span>`
-                : `<span class="tw-relic-outcome-badge" style="background: rgba(14, 165, 233, 0.2); color: #38bdf8; border: 1px solid #0ea5e9;">🎲 Aleatório: [${outcomeName}]</span>`;
+                ? `<span class="tw-relic-outcome-badge" style="background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid #22c55e;">🎯 Prioridade 1: ${f.targetTypeName} [${outcomeName}] (Garantido)</span>`
+                : `<span class="tw-relic-outcome-badge" style="background: rgba(14, 165, 233, 0.2); color: #38bdf8; border: 1px solid #0ea5e9;">🎲 Prioridade 2: Aleatório [${outcomeName}] (Sobras)</span>`;
 
             html += `
             <div class="tw-relic-recipe-card ${f.done ? 'fused' : ''}" id="recipe_card_${f.id}">
@@ -1428,8 +1438,17 @@ ${fusionStyles}
     // MOTOR DE EXECUÇÃO EM MASSA
     // ===========================================================================
     async function runFusionBatch() {
-        const selected = appState.plannedFusions.filter(r => r.selected && !r.done);
+        let selected = appState.plannedFusions.filter(r => r.selected && !r.done);
         if (selected.length === 0) return;
+
+        // Se houver fusões de mesmo tipo pendentes e o modo cascata estiver ativo, 
+        // executa PRIMEIRO todas as idênticas. Assim que terminarem, o modo cascata recalcula
+        // se novos trios idênticos foram criados nos níveis superiores antes de tocar em qualquer aleatória!
+        const hasSameTypePending = selected.some(r => r.isSameType);
+        if (hasSameTypePending && userPrefs.cascade) {
+            selected = selected.filter(r => r.isSameType);
+            addLog(`🎯 Prioridade Absoluta: executando ${selected.length} fusões de MESMO TIPO (Idênticas)...`, 'info');
+        }
 
         appState.isRunning = true;
         appState.shouldCancel = false;
@@ -1507,11 +1526,16 @@ ${fusionStyles}
 
         // Se a opção cascata estiver ativada e houver novos upgrades disponíveis
         if (userPrefs.cascade && !appState.shouldCancel && successCount > 0) {
-            addLog('🔄 Modo Cascata: recalculando novas fusões de níveis superiores...', 'info');
+            addLog('🔄 Modo Cascata: recalculando inventário...', 'info');
             updateStatsAndViews();
             const nextRound = appState.plannedFusions.filter(r => r.selected && !r.done);
             if (nextRound.length > 0) {
-                addLog(`🔄 Modo Cascata encontrou mais ${nextRound.length} fusões possíveis. Executando rodada...`, 'info');
+                const nextHasSame = nextRound.some(r => r.isSameType);
+                if (nextHasSame) {
+                    addLog(`🎯 Cascata gerou novas fusões idênticas! Priorizando trios de mesmo tipo primeiro...`, 'ok');
+                } else {
+                    addLog(`ℹ️ Todas as fusões idênticas foram esgotadas. Iniciando fusões aleatórias com as sobras...`, 'info');
+                }
                 await delay(800);
                 await runFusionBatch();
                 return;
